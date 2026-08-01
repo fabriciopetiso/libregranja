@@ -1,0 +1,14 @@
+node_modules/
+dist/
+*.log
+
+# Base de datos y adjuntos: datos de la granja, nunca al repositorio
+*.db
+*.db-wal
+*.db-shm
+/datos/
+/fotos/
+
+.env
+.env.*
+!.env.example
