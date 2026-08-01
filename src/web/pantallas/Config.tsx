@@ -23,17 +23,50 @@ const CAPACIDADES: Array<{ clave: string; etiqueta: string }> = [
   { clave: 'registraAlimento', etiqueta: 'Alimento' },
 ]
 
+/**
+ * Las secciones van en orden de dependencia: una tanda necesita una categoría,
+ * y una categoría necesita una plantilla. Mostrarlas todas apiladas escondía
+ * las de abajo, que son justamente las que hay que tocar primero.
+ */
+const SECCIONES = [
+  { clave: 'tandas', etiqueta: 'Tandas' },
+  { clave: 'categorias', etiqueta: 'Categorías' },
+  { clave: 'plantillas', etiqueta: 'Plantillas' },
+  { clave: 'insumos', etiqueta: 'Insumos' },
+  { clave: 'productos', etiqueta: 'Productos' },
+  { clave: 'contrapartes', etiqueta: 'Clientes' },
+  { clave: 'rubros', etiqueta: 'Rubros' },
+  { clave: 'especies', etiqueta: 'Especies' },
+] as const
+
+type Seccion = (typeof SECCIONES)[number]['clave']
+
 export function Config({ rol }: { rol: 'admin' | 'operador' }) {
+  const [seccion, setSeccion] = useState<Seccion>('tandas')
+
   return (
     <>
-      <Tandas />
-      <Insumos />
-      <Productos />
-      <Contrapartes />
-      <Categorias />
-      <SimpleCrud tabla="rubro_gasto" titulo="Rubros de gasto" rol={rol} />
-      <SimpleCrud tabla="especie" titulo="Especies" rol={rol} />
-      <Plantillas />
+      <nav className="subpestanas">
+        {SECCIONES.map((s) => (
+          <button
+            key={s.clave}
+            type="button"
+            className={seccion === s.clave ? 'activa' : ''}
+            onClick={() => setSeccion(s.clave)}
+          >
+            {s.etiqueta}
+          </button>
+        ))}
+      </nav>
+
+      {seccion === 'tandas' && <Tandas alIrA={setSeccion} />}
+      {seccion === 'categorias' && <Categorias alIrA={setSeccion} />}
+      {seccion === 'plantillas' && <Plantillas />}
+      {seccion === 'insumos' && <Insumos />}
+      {seccion === 'productos' && <Productos />}
+      {seccion === 'contrapartes' && <Contrapartes />}
+      {seccion === 'rubros' && <SimpleCrud tabla="rubro_gasto" titulo="Rubros de gasto" rol={rol} />}
+      {seccion === 'especies' && <SimpleCrud tabla="especie" titulo="Especies" rol={rol} />}
     </>
   )
 }
@@ -259,7 +292,7 @@ function Contrapartes() {
   )
 }
 
-function Categorias() {
+function Categorias({ alIrA }: { alIrA: (s: Seccion) => void }) {
   const { lista, mensaje, crear, anular } = useCrud('categoria')
   const plantillas = useDatos(() => api.listar('plantilla'))
   const especies = useDatos(() => api.listar('especie'))
@@ -268,9 +301,26 @@ function Categorias() {
   const [plantillaId, setPlantillaId] = useState('')
   const [especieId, setEspecieId] = useState('')
 
+  const disponibles = (plantillas.datos ?? []) as Registro[]
+  const elegida = disponibles.find((p) => p.id === plantillaId)
+
   return (
     <section className="tarjeta">
       <h2>Categorías</h2>
+
+      <p style={{ marginTop: 0, color: '#666', fontSize: '0.85rem' }}>
+        Una categoría define un tipo de tanda. Se arma eligiendo una plantilla, que no es más que un
+        conjunto de capacidades: qué se registra en las tandas de esa categoría.
+      </p>
+
+      {plantillas.datos !== null && disponibles.length === 0 && (
+        <Aviso>
+          No hay plantillas todavía.{' '}
+          <button type="button" className="chico fantasma" onClick={() => alIrA('plantillas')}>
+            Crear una plantilla
+          </button>
+        </Aviso>
+      )}
 
       {lista.length === 0 ? (
         <Vacio>Todavía no hay ninguna.</Vacio>
@@ -310,12 +360,26 @@ function Categorias() {
         </Campo>
         <div className="fila">
           <Campo etiqueta="Plantilla">
-            <Selector valor={plantillaId} alCambiar={setPlantillaId} opciones={(plantillas.datos ?? []) as Registro[]} />
+            <Selector valor={plantillaId} alCambiar={setPlantillaId} opciones={disponibles} />
           </Campo>
           <Campo etiqueta="Especie">
             <Selector valor={especieId} alCambiar={setEspecieId} opciones={(especies.datos ?? []) as Registro[]} />
           </Campo>
         </div>
+
+        {/* Qué se copia de la plantilla, antes de crear y no después. */}
+        {elegida !== undefined && (
+          <p style={{ marginTop: '-0.4rem', marginBottom: '0.9rem', color: '#666', fontSize: '0.85rem' }}>
+            Las tandas de esta categoría van a registrar:{' '}
+            <strong>
+              {CAPACIDADES.filter((c) => elegida[c.clave] === true)
+                .map((c) => c.etiqueta.toLowerCase())
+                .join(', ') || 'nada en particular'}
+            </strong>
+            . Se copian ahora, así que cambiar la plantilla después no altera esta categoría.
+          </p>
+        )}
+
         <button type="submit" className="fantasma" disabled={nombre === '' || plantillaId === ''}>
           Crear categoría
         </button>
@@ -326,7 +390,7 @@ function Categorias() {
   )
 }
 
-function Tandas() {
+function Tandas({ alIrA }: { alIrA: (s: Seccion) => void }) {
   const { lista, mensaje, crear } = useCrud('tanda')
   const categorias = useDatos(() => api.listar('categoria'))
 
@@ -334,10 +398,21 @@ function Tandas() {
   const [categoriaId, setCategoriaId] = useState('')
   const [fechaInicio, setFechaInicio] = useState(hoy())
 
+  const disponibles = (categorias.datos ?? []) as Registro[]
+
   return (
     <section className="tarjeta">
       <h2>Tandas</h2>
       <Lista items={lista} />
+
+      {categorias.datos !== null && disponibles.length === 0 && (
+        <Aviso>
+          Para abrir una tanda hace falta una categoría.{' '}
+          <button type="button" className="chico fantasma" onClick={() => alIrA('categorias')}>
+            Crear una categoría
+          </button>
+        </Aviso>
+      )}
 
       <form
         style={{ marginTop: '0.75rem' }}
@@ -351,7 +426,7 @@ function Tandas() {
         </Campo>
         <div className="fila">
           <Campo etiqueta="Categoría">
-            <Selector valor={categoriaId} alCambiar={setCategoriaId} opciones={(categorias.datos ?? []) as Registro[]} />
+            <Selector valor={categoriaId} alCambiar={setCategoriaId} opciones={disponibles} />
           </Campo>
           <Campo etiqueta="Fecha de inicio">
             <input type="date" value={fechaInicio} onChange={(e) => setFechaInicio(e.target.value)} />

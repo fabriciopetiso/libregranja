@@ -29,6 +29,7 @@ import type { Base } from '../db/conexion.js'
 import * as repos from '../db/repos.js'
 import { autenticar, cerrarSesion, crearSesion, crearUsuario, usuarioDeSesion } from './auth.js'
 import type { Usuario } from './auth.js'
+import { exportarCsv, nombreArchivo } from './exportar.js'
 
 const COOKIE = 'libregranja_sesion'
 
@@ -349,6 +350,23 @@ export function crearApi(base: Base): Hono<Entorno> {
       ),
     ),
   )
+
+  // --- export ---------------------------------------------------------------
+
+  /**
+   * Todas las cargas del período en un CSV, en el mismo orden en que el motor
+   * las calcula. Es la puerta de salida: el dato es del usuario, no del sistema.
+   */
+  api.get('/export.csv', (c) => {
+    const desde = c.req.query('desde')
+    const hasta = c.req.query('hasta')
+    const csv = exportarCsv(base, c.get('usuario').granjaId, { desde, hasta })
+
+    return c.body(csv, 200, {
+      'content-type': 'text/csv; charset=utf-8',
+      'content-disposition': `attachment; filename="${nombreArchivo(desde, hasta)}"`,
+    })
+  })
 
   // --- usuarios (sólo admin) ------------------------------------------------
 

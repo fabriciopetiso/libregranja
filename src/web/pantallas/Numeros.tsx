@@ -53,6 +53,19 @@ export function Numeros() {
             <input type="date" value={hasta} onChange={(e) => setHasta(e.target.value)} />
           </label>
         </div>
+
+        {/* Una descarga común, no fetch: así el navegador la maneja como archivo
+            y en el celular queda en Descargas, lista para compartir. */}
+        <a
+          className="descarga"
+          href={`/api/v1/export.csv?desde=${desde}&hasta=${hasta}`}
+          download
+        >
+          ⭳ Bajar todas las cargas del período (CSV)
+        </a>
+        <p style={{ margin: '0.5rem 0 0', color: '#666', fontSize: '0.8rem' }}>
+          Se abre con LibreOffice o Excel. Incluye cada movimiento con su fecha, tanda, importe y quién lo cargó.
+        </p>
       </section>
 
       {resultado.datos !== null && (
