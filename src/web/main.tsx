@@ -16,8 +16,14 @@ createRoot(raiz).render(
 )
 
 // La PWA se instala desde el navegador del celular, sin tiendas (§9).
+//
+// `serviceWorker` no existe fuera de un contexto seguro, así que entrando por
+// http://192.168.x.x esto no corre. La app funciona igual: el service worker
+// sólo cachea el app shell. Instalarla en la pantalla de inicio sí necesita HTTPS.
 if ('serviceWorker' in navigator && import.meta.env.PROD) {
   window.addEventListener('load', () => {
-    void navigator.serviceWorker.register('/sw.js')
+    navigator.serviceWorker.register('/sw.js').catch(() => {
+      // Sin service worker la app anda igual; no vale molestar al usuario.
+    })
   })
 }
