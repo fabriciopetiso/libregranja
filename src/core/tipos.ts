@@ -112,9 +112,25 @@ export interface Aviso {
   readonly detalle: string
 }
 
+/**
+ * Rendimiento de un animal con nombre.
+ *
+ * Sólo tiene sentido donde se sigue a los animales de a uno: seis conejas
+ * madre, no novecientos pollos de engorde. Por eso se llena únicamente cuando
+ * el movimiento trae `animalId`.
+ */
+export interface EstadoAnimal {
+  /** Cuántas crías se le anotaron en total. */
+  nacidos: bigint
+  /** Cuántas veces parió: un movimiento de nacimiento es un parto. */
+  partos: number
+  ultimoParto: Fecha | null
+}
+
 export interface Estado {
   readonly depositos: ReadonlyMap<string, EstadoDeposito>
   readonly tandas: ReadonlyMap<string, EstadoTanda>
+  readonly animales: ReadonlyMap<string, EstadoAnimal>
   readonly deudaPorContraparte: ReadonlyMap<string, bigint>
   readonly imputaciones: readonly Imputacion[]
   readonly avisos: readonly Aviso[]

@@ -356,16 +356,20 @@ function Animales({ alGuardar }: { alGuardar: () => void }) {
   const categorias = useDatos(() => api.listar('categoria'))
   const { mensaje, enviando, enviar } = useEnvio(alGuardar)
 
+  const animalesConNombre = useDatos(() => api.animales())
+
   const [tandaId, setTandaId] = useState('')
   const [tipo, setTipo] = useState('nacimiento')
   const [fecha, setFecha] = useState(hoy())
   const [cantidad, setCantidad] = useState('')
   const [motivo, setMotivo] = useState('')
   const [destinoId, setDestinoId] = useState('')
+  const [madreId, setMadreId] = useState('')
 
   const lista = tandas.datos?.tandas ?? []
   const tanda = lista.find((t) => t.id === tandaId)
   const cat = tanda?.categoria
+  const hembras = (animalesConNombre.datos ?? []).filter((a) => a.sexo !== 'macho')
 
   const tipos: Array<{ valor: string; etiqueta: string }> = [
     { valor: 'ingreso_animales', etiqueta: 'Ingreso de animales' },
@@ -394,6 +398,7 @@ function Animales({ alGuardar }: { alGuardar: () => void }) {
         cantidad: String(Math.trunc(Number(cantidad))),
         ...(motivo !== '' ? { motivo } : {}),
         ...(tipo === 'traslado' && destinoId !== '' ? { tandaDestinoId: destinoId } : {}),
+        ...(tipo === 'nacimiento' && madreId !== '' ? { animalId: madreId } : {}),
       },
       'Registrado.',
       () => {
@@ -475,6 +480,28 @@ function Animales({ alGuardar }: { alGuardar: () => void }) {
               El sistema tenía {tanda?.animales}. Se asienta un ajuste de {diferencia > 0n ? '+' : ''}
               {diferencia.toString()}. No se toca el pasado.
             </Aviso>
+          )}
+
+          {/* La madre puede estar en otra tanda: los gazapos se anotan donde van
+              a criarse, y la cría se le acredita igual a la coneja que parió. */}
+          {tipo === 'nacimiento' && hembras.length > 0 && (
+            <>
+              <Campo etiqueta="¿De qué madre? (opcional)">
+                <Selector
+                  valor={madreId}
+                  alCambiar={setMadreId}
+                  opciones={hembras.map((a) => ({
+                    id: a.id,
+                    nombre: a.tanda === null ? a.nombre : `${a.nombre} · ${a.tanda}`,
+                  }))}
+                  vacio="Sin especificar"
+                />
+              </Campo>
+              <p style={{ marginTop: '-0.6rem', marginBottom: '0.9rem', color: '#666', fontSize: '0.82rem' }}>
+                Anotá el nacimiento en la tanda donde van a criarse. Si los ponés directo ahí, no hace
+                falta trasladarlos después.
+              </p>
+            </>
           )}
 
           {tipo === 'traslado' && (

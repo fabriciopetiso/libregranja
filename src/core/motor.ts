@@ -20,6 +20,7 @@ import type {
   Aviso,
   Catalogo,
   Estado,
+  EstadoAnimal,
   EstadoDeposito,
   EstadoTanda,
   Imputacion,
@@ -56,6 +57,10 @@ function tandaNueva(): EstadoTanda {
   }
 }
 
+function animalNuevo(): EstadoAnimal {
+  return { nacidos: 0n, partos: 0, ultimoParto: null }
+}
+
 function obtener<T>(mapa: Map<string, T>, clave: string, crear: () => T): T {
   let valor = mapa.get(clave)
   if (valor === undefined) {
@@ -68,6 +73,7 @@ function obtener<T>(mapa: Map<string, T>, clave: string, crear: () => T): T {
 export function calcular(movimientos: readonly Movimiento[], catalogo: Catalogo = CATALOGO_VACIO): Estado {
   const depositos = new Map<string, EstadoDeposito>()
   const tandas = new Map<string, EstadoTanda>()
+  const animales = new Map<string, EstadoAnimal>()
   const deudaPorContraparte = new Map<string, bigint>()
   const imputaciones: Imputacion[] = []
   const avisos: Aviso[] = []
@@ -185,11 +191,26 @@ export function calcular(movimientos: readonly Movimiento[], catalogo: Catalogo 
         break
       }
 
+      /**
+       * Un nacimiento suma a la tanda donde se registra, que no tiene por qué
+       * ser la de la madre: si los gazapos nacen ya anotados en la tanda de
+       * cría, no hace falta después trasladarlos, y el costo de los
+       * reproductores no se reparte entre las camadas.
+       *
+       * Con `animalId` se le anota además a la madre, para saber cuál rinde.
+       */
       case 'nacimiento': {
         if (mov.tandaId === undefined) break
         const tanda = obtener(tandas, mov.tandaId, tandaNueva)
         tanda.animales += mov.cantidad
         tanda.nacidos += mov.cantidad
+
+        if (mov.animalId !== undefined) {
+          const madre = obtener(animales, mov.animalId, animalNuevo)
+          madre.nacidos += mov.cantidad
+          madre.partos += 1
+          madre.ultimoParto = mov.fecha
+        }
         break
       }
 
@@ -300,5 +321,5 @@ export function calcular(movimientos: readonly Movimiento[], catalogo: Catalogo 
     }
   }
 
-  return { depositos, tandas, deudaPorContraparte, imputaciones, avisos }
+  return { depositos, tandas, animales, deudaPorContraparte, imputaciones, avisos }
 }

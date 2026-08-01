@@ -23,6 +23,7 @@ interface Borrador {
   refId?: string
   contraparteId?: string
   tandaDestinoId?: string
+  animalId?: string
   id?: string
 }
 
@@ -44,6 +45,7 @@ function secuencia(): (b: Borrador) => Movimiento {
       ...(b.refId !== undefined ? { refId: b.refId } : {}),
       ...(b.contraparteId !== undefined ? { contraparteId: b.contraparteId } : {}),
       ...(b.tandaDestinoId !== undefined ? { tandaDestinoId: b.tandaDestinoId } : {}),
+      ...(b.animalId !== undefined ? { animalId: b.animalId } : {}),
     }
   }
 }
@@ -291,6 +293,66 @@ describe('§7 · El traslado arrastra el costo', () => {
     expect(estado.tandas.get('destino')?.costoCentavos).toBe(0n)
     expect(estado.tandas.get('destino')?.animales).toBe(5n)
     expect(estado.avisos.map((a) => a.clase)).toContain('traslado_sin_existencias')
+  })
+})
+
+describe('Conejera: reproductores con nombre y camadas', () => {
+  const m = secuencia()
+
+  /**
+   * El caso real: 4 madres y 1 padre, se faena una, nacen 8 gazapos.
+   *
+   * Los gazapos se anotan directamente en la tanda de cría, no en la conejera.
+   * Eso evita el traslado y, con él, que el costo de los reproductores se
+   * reparta entre las camadas: los padres son una inversión que se queda.
+   */
+  const movimientos = [
+    m({ tipo: 'ingreso_animales', fecha: '2026-08-01', tandaId: 'conejera', cantidad: 5n, importe: pesos(150_000) }),
+    m({ tipo: 'venta', fecha: '2026-08-10', tandaId: 'conejera', refId: 'faenado', cantidad: 1n, importe: pesos(18_000), contraparteId: 'cliente-1' }),
+    m({ tipo: 'nacimiento', fecha: '2026-08-15', tandaId: 'gazapos', cantidad: 8n, animalId: 'coneja-negra' }),
+    m({ tipo: 'nacimiento', fecha: '2026-09-20', tandaId: 'gazapos', cantidad: 6n, animalId: 'coneja-negra' }),
+    m({ tipo: 'nacimiento', fecha: '2026-09-22', tandaId: 'gazapos', cantidad: 9n, animalId: 'coneja-blanca' }),
+    m({ tipo: 'muerte', fecha: '2026-09-25', tandaId: 'gazapos', cantidad: 1n }),
+  ]
+
+  const catalogo: Catalogo = {
+    productos: new Map([['faenado', { id: 'faenado', descuentaAnimales: true }]]),
+  }
+
+  it('faenar una madre baja el plantel de reproductores', () => {
+    expect(calcular(movimientos, catalogo).tandas.get('conejera')?.animales).toBe(4n)
+  })
+
+  it('los gazapos se acumulan en su propia tanda', () => {
+    // 8 + 6 + 9 − 1 = 22
+    expect(calcular(movimientos, catalogo).tandas.get('gazapos')?.animales).toBe(22n)
+  })
+
+  it('anotar las crías en la tanda de cría deja intacto el costo de los reproductores', () => {
+    // Sin traslado no hay arrastre: los $150.000 de los padres se quedan en la
+    // conejera en vez de repartirse entre las camadas.
+    const estado = calcular(movimientos, catalogo)
+    expect(estado.tandas.get('conejera')?.costoCentavos).toBe(pesos(150_000))
+    expect(estado.tandas.get('gazapos')?.costoCentavos).toBe(0n)
+  })
+
+  it('cada cría se le acredita a la madre que parió', () => {
+    const animales = calcular(movimientos, catalogo).animales
+
+    expect(animales.get('coneja-negra')?.nacidos).toBe(14n)
+    expect(animales.get('coneja-negra')?.partos).toBe(2)
+    expect(animales.get('coneja-negra')?.ultimoParto).toBe('2026-09-20')
+
+    expect(animales.get('coneja-blanca')?.nacidos).toBe(9n)
+    expect(animales.get('coneja-blanca')?.partos).toBe(1)
+  })
+
+  it('un nacimiento sin madre indicada suma a la tanda igual, sin acreditárselo a nadie', () => {
+    const m2 = secuencia()
+    const estado = calcular([m2({ tipo: 'nacimiento', tandaId: 'gazapos', cantidad: 5n })])
+
+    expect(estado.tandas.get('gazapos')?.animales).toBe(5n)
+    expect(estado.animales.size).toBe(0)
   })
 })
 

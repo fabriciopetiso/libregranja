@@ -66,6 +66,8 @@ export const api = {
 
   estado: () => pedir<EstadoApi>('/estado'),
 
+  animales: () => pedir<AnimalApi[]>('/animales'),
+
   alimento: () => pedir<FilaAlimento[]>('/reportes/alimento'),
 
   rubros: (r?: RangoQuery) => pedir<TablaApi>(`/reportes/rubros${consulta(r)}`),
@@ -116,6 +118,20 @@ export interface EstadoApi {
     Registro & { unidades: string; centavos: string; costoUnitario: number | null; bajoMinimo: boolean }
   >
   avisos: Array<{ movimientoId: string; clase: string; detalle: string }>
+}
+
+export interface AnimalApi extends Registro {
+  nombre: string
+  sexo: string | null
+  tandaId: string | null
+  tanda: string | null
+  especie: string | null
+  estado: string | null
+  fechaNacimiento: string | null
+  nacidos: string
+  partos: number
+  ultimoParto: string | null
+  promedioPorParto: number | null
 }
 
 export interface FilaAlimento {

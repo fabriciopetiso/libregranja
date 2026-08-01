@@ -13,6 +13,7 @@ import { api } from '../api.js'
 import type { Registro } from '../api.js'
 import { Aviso, Campo, Selector, useDatos, Vacio } from '../comun.js'
 import { hoy } from '../dinero.js'
+import { Animales } from './Animales.js'
 
 const CAPACIDADES: Array<{ clave: string; etiqueta: string }> = [
   { clave: 'animalesConNombre', etiqueta: 'Animales con nombre' },
@@ -30,6 +31,7 @@ const CAPACIDADES: Array<{ clave: string; etiqueta: string }> = [
  */
 const SECCIONES = [
   { clave: 'tandas', etiqueta: 'Tandas' },
+  { clave: 'animales', etiqueta: 'Animales' },
   { clave: 'categorias', etiqueta: 'Categorías' },
   { clave: 'plantillas', etiqueta: 'Plantillas' },
   { clave: 'insumos', etiqueta: 'Insumos' },
@@ -60,6 +62,7 @@ export function Config({ rol }: { rol: 'admin' | 'operador' }) {
       </nav>
 
       {seccion === 'tandas' && <Tandas alIrA={setSeccion} />}
+      {seccion === 'animales' && <Animales />}
       {seccion === 'categorias' && <Categorias alIrA={setSeccion} />}
       {seccion === 'plantillas' && <Plantillas />}
       {seccion === 'insumos' && <Insumos />}

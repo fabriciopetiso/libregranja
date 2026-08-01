@@ -283,6 +283,37 @@ export function crearApi(base: Base): Hono<Entorno> {
     })
   })
 
+  /**
+   * Animales con nombre, con lo que rindió cada uno.
+   *
+   * Sólo aplica donde se los sigue de a uno: seis conejas madre, no
+   * novecientos pollos. Por eso es una consulta aparte y no parte de /estado.
+   */
+  api.get('/animales', (c) => {
+    const granjaId = c.get('usuario').granjaId
+    const estado = calcular(repos.leerMovimientos(base, granjaId), catalogoDe(granjaId))
+    const tandas = new Map(repos.listar(base, 'tanda', granjaId).map((t) => [t['id'] as string, t]))
+    const especies = new Map(repos.listar(base, 'especie', granjaId).map((e) => [e['id'] as string, e]))
+
+    return json(
+      repos.listar(base, 'animal', granjaId).map((a) => {
+        const rendimiento = estado.animales.get(a['id'] as string)
+        return {
+          ...a,
+          tanda: tandas.get(a['tandaId'] as string)?.['nombre'] ?? null,
+          especie: especies.get(a['especieId'] as string)?.['nombre'] ?? null,
+          nacidos: rendimiento?.nacidos ?? 0n,
+          partos: rendimiento?.partos ?? 0,
+          ultimoParto: rendimiento?.ultimoParto ?? null,
+          promedioPorParto:
+            rendimiento === undefined || rendimiento.partos === 0
+              ? null
+              : Math.round((Number(rendimiento.nacidos) / rendimiento.partos) * 100) / 100,
+        }
+      }),
+    )
+  })
+
   /** Alimento por tanda (§6.2). */
   api.get('/reportes/alimento', (c) => {
     const granjaId = c.get('usuario').granjaId
