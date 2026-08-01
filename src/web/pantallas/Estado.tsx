@@ -105,12 +105,7 @@ export function Estado() {
             <tbody>
               {datos.deposito.map((d) => (
                 <tr key={d.id}>
-                  <td>
-                    {d['nombre'] as string}
-                    {d.bajoMinimo && (
-                      <div style={{ fontSize: '0.78rem', color: '#a05a00' }}>por debajo del mínimo</div>
-                    )}
-                  </td>
+                  <td>{d['nombre'] as string}</td>
                   <td className="numero">{entero(d.unidades)}</td>
                   <td className="numero">{pesosExactos(d.costoUnitario)}</td>
                   <td className="numero">{pesos(d.centavos)}</td>

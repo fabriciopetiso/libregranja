@@ -85,6 +85,18 @@ function aParametro(valor: unknown): string | number | bigint | null | Buffer {
   return String(valor)
 }
 
+/**
+ * Normaliza un valor antes de guardarlo.
+ *
+ * Un `_id` vacío es ausencia de referencia, no una referencia a la cadena vacía.
+ * Los formularios mandan `""` cuando el usuario no eligió nada, y sin esto la
+ * clave foránea rechaza la fila entera: "sin categoría" era imposible de guardar.
+ */
+function normalizar(columna: string, valor: unknown): unknown {
+  if (columna.endsWith('_id') && valor === '') return null
+  return valor
+}
+
 function ahora(): string {
   return new Date().toISOString()
 }
@@ -128,7 +140,7 @@ export function crear(
     const columna = aSnake(clave)
     // Los campos de control no se aceptan del cliente.
     if (['id', 'granja_id', 'creado_en', 'modificado_en', 'eliminado'].includes(columna)) continue
-    if (validas.has(columna)) fila[columna] = valor
+    if (validas.has(columna)) fila[columna] = normalizar(columna, valor)
   }
 
   const columnas = Object.keys(fila)
@@ -153,7 +165,7 @@ export function actualizar(
   for (const [clave, valor] of Object.entries(datos)) {
     const columna = aSnake(clave)
     if (['id', 'granja_id', 'creado_en', 'modificado_en', 'eliminado'].includes(columna)) continue
-    if (validas.has(columna)) cambios[columna] = valor
+    if (validas.has(columna)) cambios[columna] = normalizar(columna, valor)
   }
 
   const columnas = Object.keys(cambios)
@@ -257,11 +269,11 @@ export function crearMovimiento(
       datos.tipo,
       aParametro(datos.cantidad ?? 0n),
       aParametro(datos.importe),
-      aParametro(datos.tandaId),
-      aParametro(datos.refId),
-      aParametro(datos.contraparteId),
-      aParametro(datos.tandaDestinoId),
-      aParametro(datos.animalId),
+      aParametro(datos.tandaId || null),
+      aParametro(datos.refId || null),
+      aParametro(datos.contraparteId || null),
+      aParametro(datos.tandaDestinoId || null),
+      aParametro(datos.animalId || null),
       aParametro(datos.motivo),
       aParametro(datos.fotoId),
       usuarioId,

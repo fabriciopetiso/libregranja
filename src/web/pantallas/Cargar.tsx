@@ -140,16 +140,11 @@ function CompraOGasto({ alGuardar }: { alGuardar: () => void }) {
             campos={[
               { clave: 'nombre', etiqueta: 'Nombre del insumo', sugerencia: 'Alimento terminador' },
               { clave: 'gramosPorBolsa', etiqueta: 'Kilos por bolsa', tipo: 'numero', inicial: '25' },
-              { clave: 'minimoReposicion', etiqueta: 'Avisar cuando queden menos de', tipo: 'numero', inicial: '5' },
             ]}
             alCrear={async (datos) => {
               // La persona piensa en kilos por bolsa; la base guarda gramos.
               const kilos = Number(datos['gramosPorBolsa'] ?? 0)
-              const creado = await api.crear('insumo', {
-                ...datos,
-                gramosPorBolsa: Math.round(kilos * 1000),
-                minimoReposicion: Number(datos['minimoReposicion'] ?? 0),
-              })
+              const creado = await api.crear('insumo', { ...datos, gramosPorBolsa: Math.round(kilos * 1000) })
               insumos.recargar()
               return creado as { id: string }
             }}
@@ -319,10 +314,7 @@ function Venta({ alGuardar }: { alGuardar: () => void }) {
           alCambiar={setContraparteId}
           opciones={((contrapartes.datos ?? []) as Registro[]).filter((c) => c['esCliente'] === true)}
           fijos={{ esCliente: true }}
-          campos={[
-            { clave: 'nombre', etiqueta: 'Nombre del cliente', sugerencia: 'Almacén La Esquina' },
-            { clave: 'contacto', etiqueta: 'Teléfono o contacto (opcional)' },
-          ]}
+          campos={[{ clave: 'nombre', etiqueta: 'Nombre del cliente', sugerencia: 'Almacén La Esquina' }]}
           alCrear={async (datos) => {
             const creado = await api.crear('contraparte', datos)
             contrapartes.recargar()
@@ -361,6 +353,7 @@ function Venta({ alGuardar }: { alGuardar: () => void }) {
  */
 function Animales({ alGuardar }: { alGuardar: () => void }) {
   const tandas = useDatos(() => api.estado())
+  const categorias = useDatos(() => api.listar('categoria'))
   const { mensaje, enviando, enviar } = useEnvio(alGuardar)
 
   const [tandaId, setTandaId] = useState('')
@@ -419,19 +412,39 @@ function Animales({ alGuardar }: { alGuardar: () => void }) {
     <section className="tarjeta">
       <h2>Movimiento de animales</h2>
 
-      {lista.length === 0 ? (
-        <Vacio>No hay tandas. Creá una en Configuración.</Vacio>
-      ) : (
-        <form onSubmit={enviarFormulario}>
-          <Campo etiqueta="Tanda">
-            <Selector valor={tandaId} alCambiar={setTandaId} opciones={lista as unknown as Registro[]} />
-          </Campo>
+      <form onSubmit={enviarFormulario}>
+        <SelectorConAlta
+          etiqueta="Tanda"
+          valor={tandaId}
+          alCambiar={setTandaId}
+          opciones={lista as unknown as Registro[]}
+          campos={[
+            { clave: 'nombre', etiqueta: 'Nombre de la tanda', sugerencia: 'Engorde agosto' },
+            {
+              clave: 'categoriaId',
+              etiqueta: 'Categoría',
+              tipo: 'opciones',
+              opciones: [
+                { valor: '', etiqueta: 'Sin categoría' },
+                ...((categorias.datos ?? []) as Registro[]).map((c) => ({
+                  valor: c.id,
+                  etiqueta: (c['nombre'] as string) ?? c.id,
+                })),
+              ],
+            },
+          ]}
+          alCrear={async (datos) => {
+            const creado = await api.crear('tanda', { ...datos, fechaInicio: hoy() })
+            tandas.recargar()
+            return creado as { id: string }
+          }}
+        />
 
-          {tanda !== undefined && (
-            <p style={{ marginTop: '-0.5rem', color: '#666', fontSize: '0.85rem' }}>
-              Hoy tiene {tanda.animales} animales.
-            </p>
-          )}
+        {tanda !== undefined && (
+          <p style={{ marginTop: '-0.5rem', color: '#666', fontSize: '0.85rem' }}>
+            Hoy tiene {tanda.animales} animales.
+          </p>
+        )}
 
           <Campo etiqueta="Qué pasó">
             <select value={tipo} onChange={(e) => setTipo(e.target.value)}>
@@ -480,13 +493,12 @@ function Animales({ alGuardar }: { alGuardar: () => void }) {
             </Campo>
           )}
 
-          {mensaje !== null && <Aviso clase={mensaje.clase}>{mensaje.texto}</Aviso>}
+        {mensaje !== null && <Aviso clase={mensaje.clase}>{mensaje.texto}</Aviso>}
 
-          <button type="submit" className="principal" disabled={!puede || enviando}>
-            {enviando ? 'Guardando…' : 'Guardar'}
-          </button>
-        </form>
-      )}
+        <button type="submit" className="principal" disabled={!puede || enviando}>
+          {enviando ? 'Guardando…' : 'Guardar'}
+        </button>
+      </form>
     </section>
   )
 }

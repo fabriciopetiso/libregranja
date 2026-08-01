@@ -86,6 +86,13 @@ const esquemaMovimiento = z.object({
 export function crearApi(base: Base): Hono<Entorno> {
   const api = new Hono<Entorno>()
 
+  // Un 500 sin cuerpo no le dice nada a nadie. Cualquier error que se escape
+  // vuelve como JSON con su mensaje, que es lo que la pantalla puede mostrar.
+  api.onError((error) => {
+    console.error('[api]', error)
+    return json({ error: error.message }, 500)
+  })
+
   // --- sesión ---------------------------------------------------------------
 
   api.post('/sesion', async (c) => {

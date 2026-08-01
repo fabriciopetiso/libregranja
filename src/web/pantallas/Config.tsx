@@ -152,8 +152,7 @@ function SimpleCrud({ tabla, titulo, rol }: { tabla: string; titulo: string; rol
 function Insumos() {
   const { lista, mensaje, crear, anular } = useCrud('insumo')
   const [nombre, setNombre] = useState('')
-  const [gramos, setGramos] = useState('25000')
-  const [minimo, setMinimo] = useState('0')
+  const [kilos, setKilos] = useState('25')
 
   return (
     <section className="tarjeta">
@@ -167,22 +166,16 @@ function Insumos() {
           void crear({
             nombre,
             presentacion: 'bolsa',
-            gramosPorBolsa: Number(gramos),
-            minimoReposicion: Number(minimo),
+            gramosPorBolsa: Math.round(Number(kilos) * 1000),
           }).then((ok) => ok && setNombre(''))
         }}
       >
         <Campo etiqueta="Nombre">
           <input value={nombre} onChange={(e) => setNombre(e.target.value)} />
         </Campo>
-        <div className="fila">
-          <Campo etiqueta="Gramos por bolsa">
-            <input inputMode="numeric" value={gramos} onChange={(e) => setGramos(e.target.value)} />
-          </Campo>
-          <Campo etiqueta="Mínimo de reposición">
-            <input inputMode="numeric" value={minimo} onChange={(e) => setMinimo(e.target.value)} />
-          </Campo>
-        </div>
+        <Campo etiqueta="Kilos por bolsa">
+          <input inputMode="numeric" value={kilos} onChange={(e) => setKilos(e.target.value)} />
+        </Campo>
         <button type="submit" className="fantasma" disabled={nombre === ''}>
           Agregar insumo
         </button>
@@ -307,11 +300,6 @@ function Categorias({ alIrA }: { alIrA: (s: Seccion) => void }) {
   return (
     <section className="tarjeta">
       <h2>Categorías</h2>
-
-      <p style={{ marginTop: 0, color: '#666', fontSize: '0.85rem' }}>
-        Una categoría define un tipo de tanda. Se arma eligiendo una plantilla, que no es más que un
-        conjunto de capacidades: qué se registra en las tandas de esa categoría.
-      </p>
 
       {plantillas.datos !== null && disponibles.length === 0 && (
         <Aviso>
