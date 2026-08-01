@@ -116,3 +116,152 @@ export function Selector({
     </select>
   )
 }
+
+export interface CampoAlta {
+  clave: string
+  etiqueta: string
+  tipo?: 'texto' | 'numero' | 'opciones' | 'casilla'
+  opciones?: Array<{ valor: string; etiqueta: string }>
+  inicial?: string | boolean
+  sugerencia?: string
+}
+
+/**
+ * Selector con alta al lado.
+ *
+ * Si el insumo que estás comprando no existe todavía, se crea acá mismo y queda
+ * elegido, sin salir de la pantalla ni perder lo que ya escribiste (§5.1). Tener
+ * que ir a Configuración, crearlo, volver y empezar de nuevo es exactamente lo
+ * que hace que una app de carga no se use.
+ */
+export function SelectorConAlta({
+  etiqueta,
+  valor,
+  alCambiar,
+  opciones,
+  campos,
+  fijos = {},
+  alCrear,
+  vacio = 'Elegir…',
+  textoAlta = 'Crear uno nuevo',
+}: {
+  etiqueta: string
+  valor: string
+  alCambiar: (v: string) => void
+  opciones: Array<{ id: string; nombre?: string }>
+  campos: CampoAlta[]
+  fijos?: Record<string, unknown>
+  alCrear: (datos: Record<string, unknown>) => Promise<{ id: string } | null>
+  vacio?: string
+  textoAlta?: string
+}) {
+  const [abierto, setAbierto] = useState(false)
+  const [guardando, setGuardando] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [datos, setDatos] = useState<Record<string, string | boolean>>(() =>
+    Object.fromEntries(campos.map((c) => [c.clave, c.inicial ?? (c.tipo === 'casilla' ? false : '')])),
+  )
+
+  const guardar = async () => {
+    setGuardando(true)
+    setError(null)
+    try {
+      const creado = await alCrear({ ...fijos, ...datos })
+      if (creado !== null) {
+        alCambiar(creado.id)
+        setAbierto(false)
+        setDatos(Object.fromEntries(campos.map((c) => [c.clave, c.inicial ?? (c.tipo === 'casilla' ? false : '')])))
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'no se pudo crear')
+    } finally {
+      setGuardando(false)
+    }
+  }
+
+  const nombre = String(datos['nombre'] ?? '')
+
+  return (
+    <div style={{ marginBottom: '0.9rem' }}>
+      <span style={{ display: 'block', fontSize: '0.85rem', color: '#666', marginBottom: '0.3rem' }}>{etiqueta}</span>
+
+      <div style={{ display: 'flex', gap: '0.5rem' }}>
+        <div style={{ flex: 1 }}>
+          <Selector valor={valor} alCambiar={alCambiar} opciones={opciones} vacio={vacio} />
+        </div>
+        <button
+          type="button"
+          className={abierto ? 'principal' : 'fantasma'}
+          style={{ flex: '0 0 auto', width: 'auto', paddingLeft: '1rem', paddingRight: '1rem' }}
+          onClick={() => setAbierto(!abierto)}
+          aria-label={textoAlta}
+        >
+          {abierto ? '×' : '+'}
+        </button>
+      </div>
+
+      {opciones.length === 0 && !abierto && (
+        <p style={{ margin: '0.4rem 0 0', fontSize: '0.82rem', color: '#a05a00' }}>
+          No hay ninguno cargado. Tocá <strong>+</strong> para crear el primero.
+        </p>
+      )}
+
+      {abierto && (
+        <div className="alta-rapida">
+          {campos.map((c) => (
+            <div key={c.clave} style={{ marginBottom: '0.7rem' }}>
+              {c.tipo === 'casilla' ? (
+                <label style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', margin: 0 }}>
+                  <input
+                    type="checkbox"
+                    checked={datos[c.clave] === true}
+                    onChange={(e) => setDatos({ ...datos, [c.clave]: e.target.checked })}
+                    style={{ width: 'auto', minHeight: 0 }}
+                  />
+                  <span style={{ margin: 0 }}>{c.etiqueta}</span>
+                </label>
+              ) : (
+                <>
+                  <span style={{ display: 'block', fontSize: '0.8rem', color: '#666', marginBottom: '0.25rem' }}>
+                    {c.etiqueta}
+                  </span>
+                  {c.tipo === 'opciones' ? (
+                    <select
+                      value={String(datos[c.clave] ?? '')}
+                      onChange={(e) => setDatos({ ...datos, [c.clave]: e.target.value })}
+                    >
+                      {(c.opciones ?? []).map((o) => (
+                        <option key={o.valor} value={o.valor}>
+                          {o.etiqueta}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <input
+                      value={String(datos[c.clave] ?? '')}
+                      onChange={(e) => setDatos({ ...datos, [c.clave]: e.target.value })}
+                      {...(c.tipo === 'numero' ? { inputMode: 'numeric' as const } : {})}
+                      {...(c.sugerencia !== undefined ? { placeholder: c.sugerencia } : {})}
+                      autoFocus={c.clave === 'nombre'}
+                    />
+                  )}
+                </>
+              )}
+            </div>
+          ))}
+
+          {error !== null && <div className="aviso error">{error}</div>}
+
+          <button
+            type="button"
+            className="principal"
+            onClick={() => void guardar()}
+            disabled={nombre.trim() === '' || guardando}
+          >
+            {guardando ? 'Creando…' : 'Crear y usar'}
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}

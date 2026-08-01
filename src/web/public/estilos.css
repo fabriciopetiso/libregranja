@@ -250,6 +250,16 @@ button.chico {
   font-weight: 400;
 }
 
+/* Alta de un ítem sin salir de la pantalla de carga. Se distingue del resto
+   del formulario para que quede claro que es otra cosa la que se está creando. */
+.alta-rapida {
+  margin-top: 0.6rem;
+  padding: 0.85rem;
+  background: var(--verde-claro);
+  border: 1px solid #c8e6c9;
+  border-radius: var(--radio);
+}
+
 .fila {
   display: flex;
   gap: 0.75rem;

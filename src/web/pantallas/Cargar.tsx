@@ -10,7 +10,7 @@ import { useState } from 'react'
 
 import { api, guardarMovimiento } from '../api.js'
 import type { Registro } from '../api.js'
-import { Aviso, Campo, Selector, useDatos, Vacio } from '../comun.js'
+import { Aviso, Campo, Selector, SelectorConAlta, useDatos, Vacio } from '../comun.js'
 import { aCentavos, hoy, pesosExactos } from '../dinero.js'
 
 type Solapa = 'compra' | 'venta' | 'animales'
@@ -130,13 +130,44 @@ function CompraOGasto({ alGuardar }: { alGuardar: () => void }) {
       </div>
 
       <form onSubmit={enviarFormulario}>
-        <Campo etiqueta={esInsumo ? 'Insumo' : 'Rubro'}>
-          <Selector
+        {esInsumo ? (
+          <SelectorConAlta
+            etiqueta="Insumo"
             valor={refId}
             alCambiar={setRefId}
-            opciones={((esInsumo ? insumos.datos : rubros.datos) ?? []) as Registro[]}
+            opciones={(insumos.datos ?? []) as Registro[]}
+            fijos={{ presentacion: 'bolsa' }}
+            campos={[
+              { clave: 'nombre', etiqueta: 'Nombre del insumo', sugerencia: 'Alimento terminador' },
+              { clave: 'gramosPorBolsa', etiqueta: 'Kilos por bolsa', tipo: 'numero', inicial: '25' },
+              { clave: 'minimoReposicion', etiqueta: 'Avisar cuando queden menos de', tipo: 'numero', inicial: '5' },
+            ]}
+            alCrear={async (datos) => {
+              // La persona piensa en kilos por bolsa; la base guarda gramos.
+              const kilos = Number(datos['gramosPorBolsa'] ?? 0)
+              const creado = await api.crear('insumo', {
+                ...datos,
+                gramosPorBolsa: Math.round(kilos * 1000),
+                minimoReposicion: Number(datos['minimoReposicion'] ?? 0),
+              })
+              insumos.recargar()
+              return creado as { id: string }
+            }}
           />
-        </Campo>
+        ) : (
+          <SelectorConAlta
+            etiqueta="Rubro"
+            valor={refId}
+            alCambiar={setRefId}
+            opciones={(rubros.datos ?? []) as Registro[]}
+            campos={[{ clave: 'nombre', etiqueta: 'Nombre del rubro', sugerencia: 'Combustible' }]}
+            alCrear={async (datos) => {
+              const creado = await api.crear('rubro_gasto', datos)
+              rubros.recargar()
+              return creado as { id: string }
+            }}
+          />
+        )}
 
         <Campo etiqueta="Fecha">
           <input type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} />
@@ -236,9 +267,33 @@ function Venta({ alGuardar }: { alGuardar: () => void }) {
       <h2>Venta</h2>
 
       <form onSubmit={enviarFormulario}>
-        <Campo etiqueta="Producto">
-          <Selector valor={refId} alCambiar={setRefId} opciones={(productos.datos ?? []) as Registro[]} />
-        </Campo>
+        <SelectorConAlta
+          etiqueta="Producto"
+          valor={refId}
+          alCambiar={setRefId}
+          opciones={(productos.datos ?? []) as Registro[]}
+          campos={[
+            { clave: 'nombre', etiqueta: 'Nombre del producto', sugerencia: 'Pollo entero' },
+            {
+              clave: 'unidadVenta',
+              etiqueta: 'Se vende por',
+              tipo: 'opciones',
+              inicial: 'unidad',
+              opciones: [
+                { valor: 'unidad', etiqueta: 'unidad' },
+                { valor: 'kg', etiqueta: 'kilo' },
+                { valor: 'maple', etiqueta: 'maple' },
+                { valor: 'docena', etiqueta: 'docena' },
+              ],
+            },
+            { clave: 'descuentaAnimales', etiqueta: 'Venderlo baja animales de la tanda', tipo: 'casilla', inicial: true },
+          ]}
+          alCrear={async (datos) => {
+            const creado = await api.crear('producto', datos)
+            productos.recargar()
+            return creado as { id: string }
+          }}
+        />
 
         <Campo etiqueta="Fecha">
           <input type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} />
@@ -258,13 +313,22 @@ function Venta({ alGuardar }: { alGuardar: () => void }) {
           </Campo>
         </div>
 
-        <Campo etiqueta="Cliente">
-          <Selector
-            valor={contraparteId}
-            alCambiar={setContraparteId}
-            opciones={((contrapartes.datos ?? []) as Registro[]).filter((c) => c['esCliente'] === true)}
-          />
-        </Campo>
+        <SelectorConAlta
+          etiqueta="Cliente"
+          valor={contraparteId}
+          alCambiar={setContraparteId}
+          opciones={((contrapartes.datos ?? []) as Registro[]).filter((c) => c['esCliente'] === true)}
+          fijos={{ esCliente: true }}
+          campos={[
+            { clave: 'nombre', etiqueta: 'Nombre del cliente', sugerencia: 'Almacén La Esquina' },
+            { clave: 'contacto', etiqueta: 'Teléfono o contacto (opcional)' },
+          ]}
+          alCrear={async (datos) => {
+            const creado = await api.crear('contraparte', datos)
+            contrapartes.recargar()
+            return creado as { id: string }
+          }}
+        />
 
         <Campo etiqueta="Cobrado ahora (opcional)">
           <input inputMode="decimal" value={cobrado} onChange={(e) => setCobrado(e.target.value)} placeholder="0,00" />
