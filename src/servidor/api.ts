@@ -342,11 +342,26 @@ export function crearApi(base: Base): Hono<Entorno> {
       fila.ids.push(imp.movimientoId)
     }
 
+    /**
+     * Denominador de la participación: todo lo que se le cargó a la tanda, no su
+     * saldo actual.
+     *
+     * Con el saldo, un traslado saliente achica el divisor y el porcentaje se va
+     * arriba de 100: el alimento ya imputado se compara contra un costo que en
+     * parte se fue con los animales. La pregunta de §6.2 es "de lo que costó esta
+     * tanda, cuánto fue alimento", así que se suman las imputaciones que entraron.
+     */
+    const costoBruto = new Map<string, bigint>()
+    for (const imp of estado.imputaciones) {
+      if (imp.centavos <= 0n) continue
+      costoBruto.set(imp.tandaId, (costoBruto.get(imp.tandaId) ?? 0n) + imp.centavos)
+    }
+
     const tandas = repos.listar(base, 'tanda', granjaId)
     return json(
       tandas.map((t) => {
         const fila = porTanda.get(t['id'] as string)
-        const costoTotal = estado.tandas.get(t['id'] as string)?.costoCentavos ?? 0n
+        const costoTotal = costoBruto.get(t['id'] as string) ?? 0n
         const alimento = fila?.centavos ?? 0n
         return {
           tandaId: t['id'],
@@ -355,6 +370,7 @@ export function crearApi(base: Base): Hono<Entorno> {
           gramos: fila?.gramos ?? 0n,
           centavos: alimento,
           costoTotalTanda: costoTotal,
+          saldoActual: estado.tandas.get(t['id'] as string)?.costoCentavos ?? 0n,
           participacion: costoTotal === 0n ? null : Number((alimento * 10000n) / costoTotal) / 100,
           movimientoIds: fila?.ids ?? [],
         }

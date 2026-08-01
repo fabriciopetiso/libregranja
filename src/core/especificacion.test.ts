@@ -347,6 +347,30 @@ describe('Conejera: reproductores con nombre y camadas', () => {
     expect(animales.get('coneja-blanca')?.partos).toBe(1)
   })
 
+  it('lo que se le cargó a una tanda no es lo mismo que su saldo cuando hubo traslados', () => {
+    const m2 = secuencia()
+    const estado = calcular([
+      m2({ tipo: 'ingreso_animales', fecha: '2026-08-01', tandaId: 'conejera', cantidad: 12n, importe: pesos(100_000) }),
+      m2({ tipo: 'gasto', fecha: '2026-08-05', tandaId: 'conejera', refId: 'alimento', importe: pesos(60_000) }),
+      m2({ tipo: 'traslado', fecha: '2026-09-15', tandaId: 'conejera', tandaDestinoId: 'cria', cantidad: 8n }),
+    ])
+
+    // Se le cargaron $160.000, pero el traslado se llevó 8 de 12 animales con
+    // su parte proporcional del costo. El saldo queda en un tercio.
+    const cargado = estado.imputaciones
+      .filter((i) => i.tandaId === 'conejera' && i.centavos > 0n)
+      .reduce((s, i) => s + i.centavos, 0n)
+
+    expect(cargado).toBe(pesos(160_000))
+    // 16.000.000 × 8/12 = 10.666.666,67 → se arrastran 10.666.667 y quedan 5.333.333.
+    expect(estado.tandas.get('conejera')?.costoCentavos).toBe(5_333_333n)
+
+    // Los reportes que preguntan "qué parte del costo fue alimento" tienen que
+    // dividir por lo cargado. Con el saldo darían más de 100%.
+    expect(Number((pesos(60_000) * 100n) / cargado)).toBeLessThanOrEqual(100)
+    expect(Number((pesos(60_000) * 100n) / estado.tandas.get('conejera')!.costoCentavos)).toBeGreaterThan(100)
+  })
+
   it('un nacimiento sin madre indicada suma a la tanda igual, sin acreditárselo a nadie', () => {
     const m2 = secuencia()
     const estado = calcular([m2({ tipo: 'nacimiento', tandaId: 'gazapos', cantidad: 5n })])
