@@ -1,0 +1,437 @@
+/**
+ * Configuración: acá el usuario crea la data que en otro sistema estaría
+ * escrita en el código.
+ *
+ * Las capacidades de una categoría se copian de la plantilla al crearla, así
+ * que editar la plantilla después no altera categorías ya creadas. Y nada en
+ * esta pantalla depende de cómo se llame una categoría o una plantilla.
+ */
+
+import { useState } from 'react'
+
+import { api } from '../api.js'
+import type { Registro } from '../api.js'
+import { Aviso, Campo, Selector, useDatos, Vacio } from '../comun.js'
+import { hoy } from '../dinero.js'
+
+const CAPACIDADES: Array<{ clave: string; etiqueta: string }> = [
+  { clave: 'animalesConNombre', etiqueta: 'Animales con nombre' },
+  { clave: 'registraNacimientos', etiqueta: 'Nacimientos' },
+  { clave: 'registraHuevos', etiqueta: 'Huevos' },
+  { clave: 'registraCargaIncubacion', etiqueta: 'Carga de incubación' },
+  { clave: 'registraPeso', etiqueta: 'Peso' },
+  { clave: 'registraAlimento', etiqueta: 'Alimento' },
+]
+
+export function Config({ rol }: { rol: 'admin' | 'operador' }) {
+  return (
+    <>
+      <Tandas />
+      <Insumos />
+      <Productos />
+      <Contrapartes />
+      <Categorias />
+      <SimpleCrud tabla="rubro_gasto" titulo="Rubros de gasto" rol={rol} />
+      <SimpleCrud tabla="especie" titulo="Especies" rol={rol} />
+      <Plantillas />
+    </>
+  )
+}
+
+function useCrud(tabla: string) {
+  const { datos, error, recargar } = useDatos(() => api.listar(tabla))
+  const [mensaje, setMensaje] = useState<string | null>(null)
+
+  const crear = async (cuerpo: Record<string, unknown>) => {
+    try {
+      await api.crear(tabla, cuerpo)
+      setMensaje(null)
+      recargar()
+      return true
+    } catch (e) {
+      setMensaje(e instanceof Error ? e.message : 'no se pudo crear')
+      return false
+    }
+  }
+
+  const anular = async (id: string) => {
+    try {
+      await api.anular(tabla, id)
+      recargar()
+    } catch (e) {
+      setMensaje(e instanceof Error ? e.message : 'no se pudo borrar')
+    }
+  }
+
+  return { lista: (datos ?? []) as Registro[], error, mensaje, crear, anular, recargar }
+}
+
+function Lista({ items, alBorrar }: { items: Registro[]; alBorrar?: (id: string) => void }) {
+  if (items.length === 0) return <Vacio>Todavía no hay ninguno.</Vacio>
+  return (
+    <table>
+      <tbody>
+        {items.map((i) => (
+          <tr key={i.id}>
+            <td>{(i['nombre'] as string) ?? i.id}</td>
+            {alBorrar !== undefined && (
+              <td style={{ textAlign: 'right' }}>
+                <button type="button" className="chico fantasma" onClick={() => alBorrar(i.id)}>
+                  Borrar
+                </button>
+              </td>
+            )}
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  )
+}
+
+function SimpleCrud({ tabla, titulo, rol }: { tabla: string; titulo: string; rol: 'admin' | 'operador' }) {
+  const { lista, mensaje, crear, anular } = useCrud(tabla)
+  const [nombre, setNombre] = useState('')
+
+  return (
+    <section className="tarjeta">
+      <h2>{titulo}</h2>
+      <Lista items={lista} {...(rol === 'admin' ? { alBorrar: (id: string) => void anular(id) } : {})} />
+
+      <form
+        className="fila"
+        style={{ marginTop: '0.75rem' }}
+        onSubmit={(e) => {
+          e.preventDefault()
+          void crear({ nombre }).then((ok) => ok && setNombre(''))
+        }}
+      >
+        <input value={nombre} onChange={(e) => setNombre(e.target.value)} placeholder="Nombre nuevo" />
+        <button type="submit" className="fantasma" style={{ flex: '0 0 auto', width: 'auto' }} disabled={nombre === ''}>
+          Agregar
+        </button>
+      </form>
+
+      {mensaje !== null && <Aviso clase="error">{mensaje}</Aviso>}
+    </section>
+  )
+}
+
+function Insumos() {
+  const { lista, mensaje, crear, anular } = useCrud('insumo')
+  const [nombre, setNombre] = useState('')
+  const [gramos, setGramos] = useState('25000')
+  const [minimo, setMinimo] = useState('0')
+
+  return (
+    <section className="tarjeta">
+      <h2>Insumos</h2>
+      <Lista items={lista} alBorrar={(id) => void anular(id)} />
+
+      <form
+        style={{ marginTop: '0.75rem' }}
+        onSubmit={(e) => {
+          e.preventDefault()
+          void crear({
+            nombre,
+            presentacion: 'bolsa',
+            gramosPorBolsa: Number(gramos),
+            minimoReposicion: Number(minimo),
+          }).then((ok) => ok && setNombre(''))
+        }}
+      >
+        <Campo etiqueta="Nombre">
+          <input value={nombre} onChange={(e) => setNombre(e.target.value)} />
+        </Campo>
+        <div className="fila">
+          <Campo etiqueta="Gramos por bolsa">
+            <input inputMode="numeric" value={gramos} onChange={(e) => setGramos(e.target.value)} />
+          </Campo>
+          <Campo etiqueta="Mínimo de reposición">
+            <input inputMode="numeric" value={minimo} onChange={(e) => setMinimo(e.target.value)} />
+          </Campo>
+        </div>
+        <button type="submit" className="fantasma" disabled={nombre === ''}>
+          Agregar insumo
+        </button>
+      </form>
+
+      {mensaje !== null && <Aviso clase="error">{mensaje}</Aviso>}
+    </section>
+  )
+}
+
+function Productos() {
+  const { lista, mensaje, crear, anular } = useCrud('producto')
+  const [nombre, setNombre] = useState('')
+  const [unidad, setUnidad] = useState('unidad')
+  const [descuenta, setDescuenta] = useState(true)
+
+  return (
+    <section className="tarjeta">
+      <h2>Productos</h2>
+      <Lista items={lista} alBorrar={(id) => void anular(id)} />
+
+      <form
+        style={{ marginTop: '0.75rem' }}
+        onSubmit={(e) => {
+          e.preventDefault()
+          void crear({ nombre, unidadVenta: unidad, descuentaAnimales: descuenta }).then((ok) => ok && setNombre(''))
+        }}
+      >
+        <Campo etiqueta="Nombre">
+          <input value={nombre} onChange={(e) => setNombre(e.target.value)} />
+        </Campo>
+        <Campo etiqueta="Unidad de venta">
+          <select value={unidad} onChange={(e) => setUnidad(e.target.value)}>
+            <option value="unidad">unidad</option>
+            <option value="kg">kg</option>
+            <option value="maple">maple</option>
+            <option value="docena">docena</option>
+          </select>
+        </Campo>
+        <label style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+          <input
+            type="checkbox"
+            checked={descuenta}
+            onChange={(e) => setDescuenta(e.target.checked)}
+            style={{ width: 'auto', minHeight: 0 }}
+          />
+          <span style={{ margin: 0 }}>Vender esto baja las existencias de la tanda</span>
+        </label>
+        <button type="submit" className="fantasma" disabled={nombre === ''}>
+          Agregar producto
+        </button>
+      </form>
+
+      {mensaje !== null && <Aviso clase="error">{mensaje}</Aviso>}
+    </section>
+  )
+}
+
+function Contrapartes() {
+  const { lista, mensaje, crear, anular } = useCrud('contraparte')
+  const [nombre, setNombre] = useState('')
+  const [esCliente, setEsCliente] = useState(true)
+  const [esProveedor, setEsProveedor] = useState(false)
+
+  return (
+    <section className="tarjeta">
+      <h2>Clientes y proveedores</h2>
+      <Lista items={lista} alBorrar={(id) => void anular(id)} />
+
+      <form
+        style={{ marginTop: '0.75rem' }}
+        onSubmit={(e) => {
+          e.preventDefault()
+          void crear({ nombre, esCliente, esProveedor }).then((ok) => ok && setNombre(''))
+        }}
+      >
+        <Campo etiqueta="Nombre">
+          <input value={nombre} onChange={(e) => setNombre(e.target.value)} />
+        </Campo>
+        <div className="fila">
+          <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <input
+              type="checkbox"
+              checked={esCliente}
+              onChange={(e) => setEsCliente(e.target.checked)}
+              style={{ width: 'auto', minHeight: 0 }}
+            />
+            <span style={{ margin: 0 }}>Cliente</span>
+          </label>
+          <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <input
+              type="checkbox"
+              checked={esProveedor}
+              onChange={(e) => setEsProveedor(e.target.checked)}
+              style={{ width: 'auto', minHeight: 0 }}
+            />
+            <span style={{ margin: 0 }}>Proveedor</span>
+          </label>
+        </div>
+        <button type="submit" className="fantasma" disabled={nombre === ''}>
+          Agregar
+        </button>
+      </form>
+
+      {mensaje !== null && <Aviso clase="error">{mensaje}</Aviso>}
+    </section>
+  )
+}
+
+function Categorias() {
+  const { lista, mensaje, crear, anular } = useCrud('categoria')
+  const plantillas = useDatos(() => api.listar('plantilla'))
+  const especies = useDatos(() => api.listar('especie'))
+
+  const [nombre, setNombre] = useState('')
+  const [plantillaId, setPlantillaId] = useState('')
+  const [especieId, setEspecieId] = useState('')
+
+  return (
+    <section className="tarjeta">
+      <h2>Categorías</h2>
+
+      {lista.length === 0 ? (
+        <Vacio>Todavía no hay ninguna.</Vacio>
+      ) : (
+        <table>
+          <tbody>
+            {lista.map((c) => (
+              <tr key={c.id}>
+                <td>
+                  {c['nombre'] as string}
+                  <div style={{ fontSize: '0.78rem', color: '#666' }}>
+                    {CAPACIDADES.filter((cap) => c[cap.clave] === true)
+                      .map((cap) => cap.etiqueta.toLowerCase())
+                      .join(' · ') || 'sin capacidades'}
+                  </div>
+                </td>
+                <td style={{ textAlign: 'right' }}>
+                  <button type="button" className="chico fantasma" onClick={() => void anular(c.id)}>
+                    Borrar
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+
+      <form
+        style={{ marginTop: '0.75rem' }}
+        onSubmit={(e) => {
+          e.preventDefault()
+          void crear({ nombre, plantillaId, especieId }).then((ok) => ok && setNombre(''))
+        }}
+      >
+        <Campo etiqueta="Nombre">
+          <input value={nombre} onChange={(e) => setNombre(e.target.value)} />
+        </Campo>
+        <div className="fila">
+          <Campo etiqueta="Plantilla">
+            <Selector valor={plantillaId} alCambiar={setPlantillaId} opciones={(plantillas.datos ?? []) as Registro[]} />
+          </Campo>
+          <Campo etiqueta="Especie">
+            <Selector valor={especieId} alCambiar={setEspecieId} opciones={(especies.datos ?? []) as Registro[]} />
+          </Campo>
+        </div>
+        <button type="submit" className="fantasma" disabled={nombre === '' || plantillaId === ''}>
+          Crear categoría
+        </button>
+      </form>
+
+      {mensaje !== null && <Aviso clase="error">{mensaje}</Aviso>}
+    </section>
+  )
+}
+
+function Tandas() {
+  const { lista, mensaje, crear } = useCrud('tanda')
+  const categorias = useDatos(() => api.listar('categoria'))
+
+  const [nombre, setNombre] = useState('')
+  const [categoriaId, setCategoriaId] = useState('')
+  const [fechaInicio, setFechaInicio] = useState(hoy())
+
+  return (
+    <section className="tarjeta">
+      <h2>Tandas</h2>
+      <Lista items={lista} />
+
+      <form
+        style={{ marginTop: '0.75rem' }}
+        onSubmit={(e) => {
+          e.preventDefault()
+          void crear({ nombre, categoriaId, fechaInicio }).then((ok) => ok && setNombre(''))
+        }}
+      >
+        <Campo etiqueta="Nombre">
+          <input value={nombre} onChange={(e) => setNombre(e.target.value)} placeholder="Engorde marzo" />
+        </Campo>
+        <div className="fila">
+          <Campo etiqueta="Categoría">
+            <Selector valor={categoriaId} alCambiar={setCategoriaId} opciones={(categorias.datos ?? []) as Registro[]} />
+          </Campo>
+          <Campo etiqueta="Fecha de inicio">
+            <input type="date" value={fechaInicio} onChange={(e) => setFechaInicio(e.target.value)} />
+          </Campo>
+        </div>
+        <button type="submit" className="fantasma" disabled={nombre === '' || categoriaId === ''}>
+          Abrir tanda
+        </button>
+      </form>
+
+      {mensaje !== null && <Aviso clase="error">{mensaje}</Aviso>}
+    </section>
+  )
+}
+
+function Plantillas() {
+  const { lista, mensaje, crear, anular } = useCrud('plantilla')
+  const [nombre, setNombre] = useState('')
+  const [marcadas, setMarcadas] = useState<Record<string, boolean>>({})
+
+  return (
+    <section className="tarjeta">
+      <h2>Plantillas de categoría</h2>
+
+      <table>
+        <tbody>
+          {lista.map((p) => (
+            <tr key={p.id}>
+              <td>
+                {p['nombre'] as string}
+                <div style={{ fontSize: '0.78rem', color: '#666' }}>
+                  {CAPACIDADES.filter((c) => p[c.clave] === true)
+                    .map((c) => c.etiqueta.toLowerCase())
+                    .join(' · ') || 'sin capacidades'}
+                </div>
+              </td>
+              <td style={{ textAlign: 'right' }}>
+                <button type="button" className="chico fantasma" onClick={() => void anular(p.id)}>
+                  Borrar
+                </button>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+
+      <form
+        style={{ marginTop: '0.75rem' }}
+        onSubmit={(e) => {
+          e.preventDefault()
+          void crear({ nombre, ...marcadas }).then((ok) => {
+            if (ok) {
+              setNombre('')
+              setMarcadas({})
+            }
+          })
+        }}
+      >
+        <Campo etiqueta="Nombre de la plantilla nueva">
+          <input value={nombre} onChange={(e) => setNombre(e.target.value)} />
+        </Campo>
+
+        {CAPACIDADES.map((c) => (
+          <label key={c.clave} style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '0.4rem' }}>
+            <input
+              type="checkbox"
+              checked={marcadas[c.clave] === true}
+              onChange={(e) => setMarcadas({ ...marcadas, [c.clave]: e.target.checked })}
+              style={{ width: 'auto', minHeight: 0 }}
+            />
+            <span style={{ margin: 0 }}>{c.etiqueta}</span>
+          </label>
+        ))}
+
+        <button type="submit" className="fantasma" style={{ marginTop: '0.5rem' }} disabled={nombre === ''}>
+          Crear plantilla
+        </button>
+      </form>
+
+      {mensaje !== null && <Aviso clase="error">{mensaje}</Aviso>}
+    </section>
+  )
+}

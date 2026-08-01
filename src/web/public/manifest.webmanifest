@@ -1,0 +1,14 @@
+{
+  "name": "Libregranja",
+  "short_name": "Libregranja",
+  "description": "Lo que entra, lo que sale, y los números.",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#fafafa",
+  "theme_color": "#1b5e20",
+  "lang": "es-AR",
+  "icons": [
+    { "src": "/icono.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}

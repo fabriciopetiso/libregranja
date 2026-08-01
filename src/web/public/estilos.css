@@ -1,0 +1,323 @@
+/*
+ * CSS plano con custom properties. Sin toolchain.
+ *
+ * Se usa con una mano, en un galpón, con el celular. Eso manda sobre la estética:
+ * blancos de toque grandes, tipografía que se lee con sol, y números en tabular
+ * para que las columnas de pesos se alineen.
+ */
+
+:root {
+  --verde: #1b5e20;
+  --verde-claro: #e8f5e9;
+  --tinta: #1a1a1a;
+  --gris: #666;
+  --gris-suave: #e0e0e0;
+  --fondo: #fafafa;
+  --papel: #fff;
+  --rojo: #b71c1c;
+  --ambar: #a05a00;
+
+  --toque: 48px;
+  --radio: 10px;
+  --borde: 1px solid var(--gris-suave);
+
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  font-size: 17px;
+  color: var(--tinta);
+  background: var(--fondo);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  -webkit-text-size-adjust: 100%;
+}
+
+/* --- estructura ---------------------------------------------------------- */
+
+.app {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 0 0 5rem;
+}
+
+header.barra {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.75rem 1rem;
+  background: var(--verde);
+  color: #fff;
+}
+
+header.barra h1 {
+  margin: 0;
+  font-size: 1.1rem;
+  font-weight: 600;
+}
+
+header.barra .quien {
+  font-size: 0.8rem;
+  opacity: 0.85;
+}
+
+nav.pestanas {
+  display: flex;
+  overflow-x: auto;
+  gap: 0.25rem;
+  padding: 0.5rem 1rem;
+  background: var(--papel);
+  border-bottom: var(--borde);
+  position: sticky;
+  top: 52px;
+  z-index: 9;
+}
+
+nav.pestanas a {
+  flex: 0 0 auto;
+  padding: 0.5rem 0.9rem;
+  border-radius: 999px;
+  text-decoration: none;
+  color: var(--gris);
+  font-size: 0.9rem;
+  white-space: nowrap;
+}
+
+nav.pestanas a.activa {
+  background: var(--verde-claro);
+  color: var(--verde);
+  font-weight: 600;
+}
+
+main {
+  padding: 1rem;
+}
+
+section.tarjeta {
+  background: var(--papel);
+  border: var(--borde);
+  border-radius: var(--radio);
+  padding: 1rem;
+  margin-bottom: 1rem;
+  /* Las tablas de números tienen más columnas de las que entran en un celular.
+     Se desplazan de a lado dentro de su tarjeta en vez de desbordar la página. */
+  overflow-x: auto;
+}
+
+@media (max-width: 420px) {
+  main {
+    padding: 0.6rem;
+  }
+
+  section.tarjeta {
+    padding: 0.8rem 0.7rem;
+  }
+
+  th,
+  td {
+    padding: 0.5rem 0.3rem;
+  }
+}
+
+section.tarjeta > h2 {
+  margin: 0 0 0.75rem;
+  font-size: 1rem;
+  color: var(--gris);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+/* --- formularios --------------------------------------------------------- */
+
+label {
+  display: block;
+  margin-bottom: 0.9rem;
+}
+
+label > span {
+  display: block;
+  font-size: 0.85rem;
+  color: var(--gris);
+  margin-bottom: 0.3rem;
+}
+
+input,
+select,
+textarea,
+button {
+  font: inherit;
+  width: 100%;
+  min-height: var(--toque);
+  padding: 0.6rem 0.75rem;
+  border: var(--borde);
+  border-radius: var(--radio);
+  background: var(--papel);
+  color: var(--tinta);
+}
+
+input:focus,
+select:focus {
+  outline: 2px solid var(--verde);
+  outline-offset: 1px;
+}
+
+input[inputmode='decimal'],
+input[inputmode='numeric'] {
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+button {
+  cursor: pointer;
+  font-weight: 600;
+}
+
+button.principal {
+  background: var(--verde);
+  color: #fff;
+  border-color: var(--verde);
+}
+
+button.principal:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+button.fantasma {
+  background: transparent;
+  color: var(--verde);
+  border-color: var(--verde);
+}
+
+button.chico {
+  width: auto;
+  min-height: 36px;
+  padding: 0.3rem 0.7rem;
+  font-size: 0.85rem;
+  font-weight: 400;
+}
+
+.fila {
+  display: flex;
+  gap: 0.75rem;
+}
+
+.fila > * {
+  flex: 1;
+}
+
+/* --- tablas -------------------------------------------------------------- */
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+th,
+td {
+  padding: 0.55rem 0.4rem;
+  text-align: left;
+  border-bottom: var(--borde);
+}
+
+th {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--gris);
+  font-weight: 600;
+}
+
+td.numero,
+th.numero {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+tr.total td {
+  font-weight: 700;
+  border-top: 2px solid var(--tinta);
+  border-bottom: none;
+}
+
+/* Un número que se puede abrir se ve distinto de uno que no (§6.6). */
+button.abrible {
+  width: auto;
+  min-height: 0;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--verde);
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+  text-decoration: underline dotted;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+/* --- avisos y estados ---------------------------------------------------- */
+
+.aviso {
+  padding: 0.6rem 0.8rem;
+  border-radius: var(--radio);
+  font-size: 0.85rem;
+  margin-bottom: 0.5rem;
+  background: #fff8e1;
+  color: var(--ambar);
+  border: 1px solid #ffe082;
+}
+
+.error {
+  background: #ffebee;
+  color: var(--rojo);
+  border-color: #ffcdd2;
+}
+
+.vacio {
+  color: var(--gris);
+  font-size: 0.9rem;
+  padding: 1rem 0;
+  text-align: center;
+}
+
+.pendientes {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding: 0.6rem 1rem;
+  background: var(--ambar);
+  color: #fff;
+  font-size: 0.85rem;
+  text-align: center;
+}
+
+.ingreso {
+  max-width: 380px;
+  margin: 3rem auto;
+  padding: 1rem;
+}
+
+.ingreso h1 {
+  text-align: center;
+  color: var(--verde);
+  margin-bottom: 0.25rem;
+}
+
+.ingreso p.lema {
+  text-align: center;
+  color: var(--gris);
+  font-size: 0.9rem;
+  margin-top: 0;
+  margin-bottom: 2rem;
+}
