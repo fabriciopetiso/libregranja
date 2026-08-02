@@ -57,6 +57,7 @@ function tandaNueva(): EstadoTanda {
     registrosFertiles: 0,
     nacidos: 0n,
     huevosRecolectados: 0n,
+    huevosDisponibles: 0n,
   }
 }
 
@@ -221,16 +222,30 @@ export function calcular(movimientos: readonly Movimiento[], catalogo: Catalogo 
             costo.costoCentavos = 0n
           }
         }
+        // Vender siempre saca algo del stock de esa tanda: un pollo entero baja
+        // un animal, una docena de huevos baja doce huevos.
         const producto = mov.refId !== undefined ? catalogo.productos.get(mov.refId) : undefined
-        if (producto?.descuentaAnimales === true && mov.tandaId !== undefined) {
+        if (producto !== undefined && mov.tandaId !== undefined) {
           const tanda = obtener(tandas, mov.tandaId, tandaNueva)
-          tanda.animales -= mov.cantidad
-          if (tanda.animales < 0n) {
-            avisos.push({
-              movimientoId: mov.id,
-              clase: 'existencias_en_descubierto',
-              detalle: `La tanda ${mov.tandaId} queda en ${tanda.animales} animales.`,
-            })
+
+          if (producto.descuenta === 'animales') {
+            tanda.animales -= mov.cantidad
+            if (tanda.animales < 0n) {
+              avisos.push({
+                movimientoId: mov.id,
+                clase: 'existencias_en_descubierto',
+                detalle: `La tanda ${mov.tandaId} queda en ${tanda.animales} animales.`,
+              })
+            }
+          } else {
+            tanda.huevosDisponibles -= mov.cantidad
+            if (tanda.huevosDisponibles < 0n) {
+              avisos.push({
+                movimientoId: mov.id,
+                clase: 'huevos_en_descubierto',
+                detalle: `La tanda ${mov.tandaId} queda en ${tanda.huevosDisponibles} huevos. Falta registrar una recolección anterior.`,
+              })
+            }
           }
         }
         break
@@ -353,9 +368,31 @@ export function calcular(movimientos: readonly Movimiento[], catalogo: Catalogo 
         break
       }
 
+      /**
+       * Cargar la incubadora.
+       *
+       * Con `tandaDestinoId`, los huevos salen de la tanda de ponedoras y entran
+       * a la incubadora: es un traslado de huevos, no una aparición. Sin él,
+       * `tandaId` es la incubadora y los huevos vinieron de afuera —comprados, o
+       * de antes de empezar a usar la app—.
+       */
       case 'carga_incubacion': {
         if (mov.tandaId === undefined) break
-        obtener(tandas, mov.tandaId, tandaNueva).huevosCargados += mov.cantidad
+
+        if (mov.tandaDestinoId !== undefined) {
+          const origen = obtener(tandas, mov.tandaId, tandaNueva)
+          origen.huevosDisponibles -= mov.cantidad
+          if (origen.huevosDisponibles < 0n) {
+            avisos.push({
+              movimientoId: mov.id,
+              clase: 'huevos_en_descubierto',
+              detalle: `La tanda ${mov.tandaId} queda en ${origen.huevosDisponibles} huevos.`,
+            })
+          }
+          obtener(tandas, mov.tandaDestinoId, tandaNueva).huevosCargados += mov.cantidad
+        } else {
+          obtener(tandas, mov.tandaId, tandaNueva).huevosCargados += mov.cantidad
+        }
         break
       }
 
@@ -367,9 +404,27 @@ export function calcular(movimientos: readonly Movimiento[], catalogo: Catalogo 
         break
       }
 
+      /** Recolección diaria: suma a lo juntado y a lo disponible. */
       case 'huevos': {
         if (mov.tandaId === undefined) break
-        obtener(tandas, mov.tandaId, tandaNueva).huevosRecolectados += mov.cantidad
+        const tanda = obtener(tandas, mov.tandaId, tandaNueva)
+        tanda.huevosRecolectados += mov.cantidad
+        tanda.huevosDisponibles += mov.cantidad
+        break
+      }
+
+      /** Huevos que salen sin venderse: rotos, o consumidos en casa. */
+      case 'salida_huevos': {
+        if (mov.tandaId === undefined) break
+        const tanda = obtener(tandas, mov.tandaId, tandaNueva)
+        tanda.huevosDisponibles -= mov.cantidad
+        if (tanda.huevosDisponibles < 0n) {
+          avisos.push({
+            movimientoId: mov.id,
+            clase: 'huevos_en_descubierto',
+            detalle: `La tanda ${mov.tandaId} queda en ${tanda.huevosDisponibles} huevos.`,
+          })
+        }
         break
       }
 

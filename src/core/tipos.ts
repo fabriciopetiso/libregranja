@@ -35,6 +35,7 @@ export type TipoConocido =
   | 'carga_incubacion'
   | 'fertiles'
   | 'huevos'
+  | 'salida_huevos'
   | 'peso'
 
 export type TipoMovimiento = TipoConocido | (string & {})
@@ -67,10 +68,15 @@ export interface Movimiento {
   readonly eliminado: boolean
 }
 
-/** Lo único del catálogo que el motor necesita para calcular. */
+/**
+ * Lo único del catálogo que el motor necesita para calcular.
+ *
+ * Vender siempre saca algo del stock: un pollo entero baja un animal, una
+ * docena de huevos baja doce huevos.
+ */
 export interface Producto {
   readonly id: string
-  readonly descuentaAnimales: boolean
+  readonly descuenta: 'animales' | 'huevos'
 }
 
 /**
@@ -108,7 +114,15 @@ export interface EstadoTanda {
   /** Cuántas veces se registraron fértiles. Si es 0, el porcentaje sobre fértiles no se muestra (§7). */
   registrosFertiles: number
   nacidos: bigint
+  /** Todo lo que se juntó, sin descontar nada. */
   huevosRecolectados: bigint
+  /**
+   * Lo que hay ahora: juntados − vendidos − incubados − perdidos.
+   *
+   * Puede quedar negativo si falta registrar una recolección anterior; se avisa
+   * y no se bloquea, igual que con el resto (§4).
+   */
+  huevosDisponibles: bigint
 }
 
 /** Un peso imputado a una tanda, con el movimiento que lo originó. Sostiene el drill-down de §6.6. */
@@ -131,7 +145,12 @@ export interface Imputacion {
  */
 export interface Aviso {
   readonly movimientoId: string
-  readonly clase: 'deposito_en_descubierto' | 'existencias_en_descubierto' | 'traslado_sin_existencias' | 'tipo_desconocido'
+  readonly clase:
+    | 'deposito_en_descubierto'
+    | 'existencias_en_descubierto'
+    | 'huevos_en_descubierto'
+    | 'traslado_sin_existencias'
+    | 'tipo_desconocido'
   readonly detalle: string
 }
 

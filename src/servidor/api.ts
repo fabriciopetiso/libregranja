@@ -301,7 +301,11 @@ export function crearApi(base: Base): Hono<Entorno> {
     productos: new Map(
       repos.listar(base, 'producto', granjaId).map((p) => [
         p['id'] as string,
-        { id: p['id'] as string, descuentaAnimales: p['descuentaAnimales'] === true },
+        {
+          id: p['id'] as string,
+          // Vender siempre saca algo del stock: animales o huevos.
+          descuenta: (p['descuenta'] === 'huevos' ? 'huevos' : 'animales') as 'animales' | 'huevos',
+        },
       ]),
     ),
     jerarquia: repos.leerJerarquia(base, granjaId),
@@ -340,16 +344,19 @@ export function crearApi(base: Base): Hono<Entorno> {
       repos.listar(base, 'especie', granjaId).map((e) => [e['id'] as string, e['nombre'] as string]),
     )
 
-    const animalesDe = (unidadId: string): { total: bigint; porEspecie: Record<string, string> } => {
+    const animalesDe = (unidadId: string): { total: bigint; huevos: bigint; porEspecie: Record<string, string> } => {
       const porEspecie = new Map<string, bigint>()
       let total = 0n
+      let huevos = 0n
 
       const recorrer = (id: string, visitados: Set<string>): void => {
         if (visitados.has(id)) return
         visitados.add(id)
 
         for (const t of tandas.filter((x) => x['unidadId'] === id)) {
-          const cantidad = estado.tandas.get(t['id'] as string)?.animales ?? 0n
+          const suya = estado.tandas.get(t['id'] as string)
+          huevos += suya?.huevosDisponibles ?? 0n
+          const cantidad = suya?.animales ?? 0n
           if (cantidad === 0n) continue
           total += cantidad
           const id = t['especieId'] as string | null
@@ -366,6 +373,7 @@ export function crearApi(base: Base): Hono<Entorno> {
       recorrer(unidadId, new Set())
       return {
         total,
+        huevos,
         porEspecie: Object.fromEntries([...porEspecie].map(([k, v]) => [k, v.toString()])),
       }
     }
@@ -379,6 +387,7 @@ export function crearApi(base: Base): Hono<Entorno> {
         ...u,
         tandas: tandas.filter((t) => t['unidadId'] === id).length,
         animales: conteo.total,
+        huevos: conteo.huevos,
         animalesPorEspecie: conteo.porEspecie,
         costoPropio: b?.propioEgresos ?? 0n,
         costoCentavos: b?.totalEgresos ?? 0n,
@@ -410,6 +419,7 @@ export function crearApi(base: Base): Hono<Entorno> {
           huevosCargados: calculado?.huevosCargados ?? 0n,
           nacidos: calculado?.nacidos ?? 0n,
           huevosRecolectados: calculado?.huevosRecolectados ?? 0n,
+          huevos: calculado?.huevosDisponibles ?? 0n,
           incubacion: calculado === undefined ? null : rendimientoIncubacion(calculado),
           diasAbierta: Math.max(0, Math.floor((hoy.getTime() - inicio.getTime()) / 86_400_000)),
         }
@@ -426,6 +436,10 @@ export function crearApi(base: Base): Hono<Entorno> {
           bajoMinimo: unidades < BigInt(Number(i['minimoReposicion'] ?? 0)),
         }
       }),
+      totales: {
+        animales: [...estado.tandas.values()].reduce((s, t) => s + t.animales, 0n),
+        huevos: [...estado.tandas.values()].reduce((s, t) => s + t.huevosDisponibles, 0n),
+      },
       avisos: estado.avisos,
     })
   })

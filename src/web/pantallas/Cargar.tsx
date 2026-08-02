@@ -481,13 +481,15 @@ function Vendi({ alGuardar }: { alGuardar: () => void }) {
   const [cantidad, setCantidad] = useState('')
   const [importe, setImporte] = useState('')
   const [cobrado, setCobrado] = useState('')
+  const [tocoCobrado, setTocoCobrado] = useState(false)
   const [contraparteId, setContraparteId] = useState('')
   const [destino, setDestino] = useState<Destino>({ unidadId: '', tandaId: '' })
   const [animalId, setAnimalId] = useState('')
 
   const centavos = aCentavos(importe)
-  const cobradoCentavos = aCentavos(cobrado)
+  const cobradoCentavos = tocoCobrado ? aCentavos(cobrado) : centavos
   const deuda = centavos !== null ? centavos - (cobradoCentavos ?? 0n) : null
+  const quedaDebiendo = deuda !== null && deuda > 0n
   const animalesDeLaTanda = cat.animales.filter((a) => a.tandaId === destino.tandaId)
 
   const enviarFormulario = async (e: React.FormEvent) => {
@@ -514,6 +516,7 @@ function Vendi({ alGuardar }: { alGuardar: () => void }) {
         setCantidad('')
         setImporte('')
         setCobrado('')
+        setTocoCobrado(false)
       },
     )
 
@@ -554,10 +557,14 @@ function Vendi({ alGuardar }: { alGuardar: () => void }) {
               ],
             },
             {
-              clave: 'descuentaAnimales',
-              etiqueta: 'Venderlo baja animales de la tanda',
-              tipo: 'casilla',
-              inicial: true,
+              clave: 'descuenta',
+              etiqueta: '¿Qué sale del stock al venderlo?',
+              tipo: 'opciones',
+              inicial: 'animales',
+              opciones: [
+                { valor: 'animales', etiqueta: 'Animales' },
+                { valor: 'huevos', etiqueta: 'Huevos' },
+              ],
             },
           ]}
           alCrear={async (datos) => {
@@ -585,8 +592,9 @@ function Vendi({ alGuardar }: { alGuardar: () => void }) {
           <input type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} />
         </Campo>
 
+        {quedaDebiendo && (
         <SelectorConAlta
-          etiqueta="¿A quién?"
+          etiqueta="¿Quién queda debiendo?"
           valor={contraparteId}
           alCambiar={setContraparteId}
           opciones={((contrapartes.datos ?? []) as Registro[]).filter((c) => c['esCliente'] === true)}
@@ -598,13 +606,24 @@ function Vendi({ alGuardar }: { alGuardar: () => void }) {
             return creado as { id: string }
           }}
         />
+        )}
 
-        <Campo etiqueta="Cobrado ahora (opcional)">
-          <input inputMode="decimal" value={cobrado} onChange={(e) => setCobrado(e.target.value)} placeholder="0,00" />
+        {/* Casi siempre pagan en el momento, así que viene lleno con el total.
+            Si quedan debiendo se baja a mano, y recién ahí se pide el cliente. */}
+        <Campo etiqueta="Cobrado">
+          <input
+            inputMode="decimal"
+            value={tocoCobrado ? cobrado : importe}
+            onChange={(e) => {
+              setTocoCobrado(true)
+              setCobrado(e.target.value)
+            }}
+            placeholder="0,00"
+          />
         </Campo>
 
-        {deuda !== null && deuda > 0n && (
-          <Aviso>Queda una deuda de {pesosExactos(Number(deuda))}. Aparece en Números hasta saldarse.</Aviso>
+        {quedaDebiendo && (
+          <Aviso>Queda debiendo {pesosExactos(Number(deuda))}. Aparece en Inicio hasta que se salde.</Aviso>
         )}
 
         <SelectorDestino
@@ -678,9 +697,11 @@ function PasoAlgo({ alGuardar }: { alGuardar: () => void }) {
   }
   if (capacidades?.['registraHuevos'] === true) {
     opciones.push({ valor: 'huevos', etiqueta: 'Junté huevos' })
+    opciones.push({ valor: 'salida_huevos', etiqueta: 'Se rompieron o los consumimos' })
+    // Los huevos salen de acá hacia la incubadora: es un traslado de huevos.
+    opciones.push({ valor: 'carga_incubacion', etiqueta: 'Los mandé a incubar' })
   }
   if (capacidades?.['registraCargaIncubacion'] === true) {
-    opciones.push({ valor: 'carga_incubacion', etiqueta: 'Cargué huevos a incubar' })
     opciones.push({ valor: 'fertiles', etiqueta: 'Conté los fértiles' })
   }
   if (capacidades?.['registraPeso'] === true) {
@@ -699,7 +720,9 @@ function PasoAlgo({ alGuardar }: { alGuardar: () => void }) {
         ...(destino.unidadId !== '' ? { unidadId: destino.unidadId } : {}),
         cantidad: String(Math.trunc(Number(cantidad || '0'))),
         ...(motivo !== '' ? { motivo } : {}),
-        ...(valido === 'traslado' && aDonde.tandaId !== '' ? { tandaDestinoId: aDonde.tandaId } : {}),
+        ...((valido === 'traslado' || valido === 'carga_incubacion') && aDonde.tandaId !== ''
+          ? { tandaDestinoId: aDonde.tandaId }
+          : {}),
         ...(valido === 'nacimiento' && madreId !== '' ? { animalId: madreId } : {}),
       },
       'Registrado.',
@@ -792,10 +815,10 @@ function PasoAlgo({ alGuardar }: { alGuardar: () => void }) {
             </>
           )}
 
-          {valido === 'traslado' && (
+          {(valido === 'traslado' || valido === 'carga_incubacion') && (
             <>
               <SelectorDestino
-                etiqueta="¿A dónde van?"
+                etiqueta={valido === 'carga_incubacion' ? '¿A qué incubadora?' : '¿A dónde van?'}
                 destino={aDonde}
                 alCambiar={setADonde}
                 unidades={cat.unidades}
@@ -807,13 +830,17 @@ function PasoAlgo({ alGuardar }: { alGuardar: () => void }) {
               <SelectorConAlta
                 etiqueta=""
                 soloAlta
-                textoAlta="Van a una tanda nueva"
+                textoAlta={valido === 'carga_incubacion' ? 'Es una carga nueva' : 'Van a una tanda nueva'}
                 valor={aDonde.tandaId}
                 alCambiar={(id) => setADonde({ ...aDonde, tandaId: id })}
                 opciones={[]}
                 fijos={{ unidadId: aDonde.unidadId }}
                 campos={[
-                  { clave: 'nombre', etiqueta: 'Nombre de la tanda', sugerencia: 'Reproductoras elegidas' },
+                  {
+                    clave: 'nombre',
+                    etiqueta: 'Nombre de la tanda',
+                    sugerencia: valido === 'carga_incubacion' ? 'Incubación de agosto' : 'Reproductoras elegidas',
+                  },
                   {
                     clave: 'categoriaId',
                     etiqueta: '¿Para qué es?',
@@ -835,12 +862,14 @@ function PasoAlgo({ alGuardar }: { alGuardar: () => void }) {
               />
 
               <p className="calculado">
-                El costo viaja con los animales, en proporción a cuántos se van.
+                {valido === 'carga_incubacion'
+                  ? 'Los huevos salen del stock de esta tanda. A los 21 días registrás los nacidos.'
+                  : 'El costo viaja con los animales, en proporción a cuántos se van.'}
               </p>
             </>
           )}
 
-          {(valido === 'muerte' || valido === 'recuento' || valido === 'traslado') && (
+          {(valido === 'muerte' || valido === 'recuento' || valido === 'traslado' || valido === 'salida_huevos') && (
             <Campo etiqueta={valido === 'traslado' ? 'Comentario' : 'Motivo (opcional)'}>
               <input
                 value={motivo}
@@ -858,7 +887,7 @@ function PasoAlgo({ alGuardar }: { alGuardar: () => void }) {
             disabled={
               destino.tandaId === '' ||
               cantidad.trim() === '' ||
-              (valido === 'traslado' && aDonde.tandaId === '') ||
+              ((valido === 'traslado' || valido === 'carga_incubacion') && aDonde.tandaId === '') ||
               enviando
             }
           >

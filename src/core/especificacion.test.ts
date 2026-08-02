@@ -25,6 +25,7 @@ interface Borrador {
   tandaDestinoId?: string
   unidadId?: string
   animalId?: string
+  motivo?: string
   id?: string
 }
 
@@ -48,6 +49,7 @@ function secuencia(): (b: Borrador) => Movimiento {
       ...(b.tandaDestinoId !== undefined ? { tandaDestinoId: b.tandaDestinoId } : {}),
       ...(b.unidadId !== undefined ? { unidadId: b.unidadId } : {}),
       ...(b.animalId !== undefined ? { animalId: b.animalId } : {}),
+      ...(b.motivo !== undefined ? { motivo: b.motivo } : {}),
     }
   }
 }
@@ -58,7 +60,7 @@ function pesos(monto: number): bigint {
 }
 
 const catalogoConDescuento: Catalogo = {
-  productos: new Map([['pollo', { id: 'pollo', descuentaAnimales: true }]]),
+  productos: new Map([['pollo', { id: 'pollo', descuenta: 'animales' as const }]]),
 }
 
 // --- §8 · Costo por bolsa ----------------------------------------------------
@@ -318,7 +320,7 @@ describe('Conejera: reproductores con nombre y camadas', () => {
   ]
 
   const catalogo: Catalogo = {
-    productos: new Map([['faenado', { id: 'faenado', descuentaAnimales: true }]]),
+    productos: new Map([['faenado', { id: 'faenado', descuenta: 'animales' as const }]]),
   }
 
   it('faenar una madre baja el plantel de reproductores', () => {
@@ -518,6 +520,106 @@ describe('Imputación en cascada y balance por nivel', () => {
 
     expect(() => balancePorNivel(estado, circular)).not.toThrow()
     expect(balancePorNivel(estado, circular).get('b')?.totalEgresos).toBe(pesos(10_000))
+  })
+})
+
+describe('Stock de huevos', () => {
+  const catalogo: Catalogo = {
+    productos: new Map([
+      ['docena', { id: 'docena', descuenta: 'huevos' as const }],
+      ['pollo', { id: 'pollo', descuenta: 'animales' as const }],
+    ]),
+  }
+
+  it('juntar suma al stock de esa tanda', () => {
+    const m = secuencia()
+    const estado = calcular([
+      m({ tipo: 'huevos', tandaId: 'ponedoras', cantidad: 95n }),
+      m({ tipo: 'huevos', tandaId: 'ponedoras', cantidad: 88n }),
+    ])
+
+    expect(estado.tandas.get('ponedoras')?.huevosRecolectados).toBe(183n)
+    expect(estado.tandas.get('ponedoras')?.huevosDisponibles).toBe(183n)
+  })
+
+  it('vender huevos baja el stock, no los animales', () => {
+    const m = secuencia()
+    const estado = calcular(
+      [
+        m({ tipo: 'ingreso_animales', tandaId: 'ponedoras', cantidad: 120n }),
+        m({ tipo: 'huevos', tandaId: 'ponedoras', cantidad: 300n }),
+        m({ tipo: 'venta', tandaId: 'ponedoras', refId: 'docena', cantidad: 90n, importe: pesos(27_000) }),
+      ],
+      catalogo,
+    )
+
+    expect(estado.tandas.get('ponedoras')?.huevosDisponibles).toBe(210n)
+    expect(estado.tandas.get('ponedoras')?.animales).toBe(120n)
+    // Lo juntado no baja: es el histórico de producción.
+    expect(estado.tandas.get('ponedoras')?.huevosRecolectados).toBe(300n)
+  })
+
+  it('vender un producto de animales no toca los huevos', () => {
+    const m = secuencia()
+    const estado = calcular(
+      [
+        m({ tipo: 'ingreso_animales', tandaId: 'ponedoras', cantidad: 120n }),
+        m({ tipo: 'huevos', tandaId: 'ponedoras', cantidad: 300n }),
+        m({ tipo: 'venta', tandaId: 'ponedoras', refId: 'pollo', cantidad: 5n, importe: pesos(32_000) }),
+      ],
+      catalogo,
+    )
+
+    expect(estado.tandas.get('ponedoras')?.animales).toBe(115n)
+    expect(estado.tandas.get('ponedoras')?.huevosDisponibles).toBe(300n)
+  })
+
+  it('lo que se rompe o se come en casa sale del stock', () => {
+    const m = secuencia()
+    const estado = calcular([
+      m({ tipo: 'huevos', tandaId: 'ponedoras', cantidad: 300n }),
+      m({ tipo: 'salida_huevos', tandaId: 'ponedoras', cantidad: 24n, motivo: 'consumo propio' }),
+      m({ tipo: 'salida_huevos', tandaId: 'ponedoras', cantidad: 6n, motivo: 'se rompieron' }),
+    ])
+
+    expect(estado.tandas.get('ponedoras')?.huevosDisponibles).toBe(270n)
+  })
+
+  /**
+   * Cargar la incubadora es mover huevos, no hacerlos aparecer: salen de la
+   * tanda de ponedoras y entran a la camada de incubación.
+   */
+  it('cargar la incubadora saca los huevos de la tanda que los puso', () => {
+    const m = secuencia()
+    const estado = calcular([
+      m({ tipo: 'huevos', tandaId: 'ponedoras', cantidad: 1500n }),
+      m({ tipo: 'carga_incubacion', tandaId: 'ponedoras', tandaDestinoId: 'incubacion-julio', cantidad: 1200n }),
+      m({ tipo: 'nacimiento', tandaId: 'incubacion-julio', cantidad: 912n }),
+    ])
+
+    expect(estado.tandas.get('ponedoras')?.huevosDisponibles).toBe(300n)
+    expect(estado.tandas.get('incubacion-julio')?.huevosCargados).toBe(1200n)
+    expect(rendimientoIncubacion(estado.tandas.get('incubacion-julio')!).sobreCargados).toBe(76)
+  })
+
+  it('una carga sin origen sigue funcionando: los huevos vinieron de afuera', () => {
+    const m = secuencia()
+    const estado = calcular([m({ tipo: 'carga_incubacion', tandaId: 'incubacion-julio', cantidad: 1200n })])
+    expect(estado.tandas.get('incubacion-julio')?.huevosCargados).toBe(1200n)
+  })
+
+  it('vender más huevos de los que hay se permite y se avisa (§4)', () => {
+    const m = secuencia()
+    const estado = calcular(
+      [
+        m({ tipo: 'huevos', tandaId: 'ponedoras', cantidad: 50n }),
+        m({ tipo: 'venta', tandaId: 'ponedoras', refId: 'docena', cantidad: 80n, importe: pesos(24_000) }),
+      ],
+      catalogo,
+    )
+
+    expect(estado.tandas.get('ponedoras')?.huevosDisponibles).toBe(-30n)
+    expect(estado.avisos.map((a) => a.clase)).toContain('huevos_en_descubierto')
   })
 })
 

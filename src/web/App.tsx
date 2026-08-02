@@ -6,8 +6,7 @@ import type { GranjaApi, Sesion } from './api.js'
 import { Ingreso } from './pantallas/Ingreso.js'
 import { Cargar } from './pantallas/Cargar.js'
 import { Comenzar } from './pantallas/Comenzar.js'
-import { Estado } from './pantallas/Estado.js'
-import { Numeros } from './pantallas/Numeros.js'
+import { Inicio } from './pantallas/Inicio.js'
 
 export function App() {
   const [sesion, setSesion] = useState<Sesion | null>(null)
@@ -78,23 +77,21 @@ export function App() {
       </header>
 
       <nav className="pestanas">
-        <Pestana a="/estado">Estado</Pestana>
+        <Pestana a="/inicio">Inicio</Pestana>
         <Pestana a="/cargar">Cargar</Pestana>
-        <Pestana a="/numeros">Números</Pestana>
         <Pestana a="/granjas">Granjas</Pestana>
       </nav>
 
       <main>
         <Routes>
-          <Route path="/estado" element={<Estado />} />
+          <Route path="/inicio" element={<Inicio />} />
           <Route path="/cargar" element={<Cargar alGuardar={alGuardar} />} />
-          <Route path="/numeros" element={<Numeros />} />
           <Route path="/comenzar" element={<PantallaComenzar />} />
           <Route
             path="/granjas"
             element={<Granjas granjas={granjas} activa={sesion.granjaId} alCambiar={cargarSesion} />}
           />
-          <Route path="*" element={<Navigate to="/estado" replace />} />
+          <Route path="*" element={<Navigate to="/inicio" replace />} />
         </Routes>
       </main>
 
@@ -154,7 +151,7 @@ function Granjas({
     api
       .cambiarGranja(id)
       .then(() => alCambiar())
-      .then(() => navegar('/estado'))
+      .then(() => navegar('/inicio'))
       .finally(() => setTrabajando(false))
   }
 

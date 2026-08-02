@@ -1,35 +1,53 @@
 /**
- * Estado de la granja, y donde se administra lo que se ve.
+ * La pantalla principal: qué tengo y cómo me fue.
  *
- * Se recorre como se recorre el campo: primero el lugar, después lo que hay
- * adentro. Cada nivel muestra lo suyo más todo lo que contiene, y el resultado
- * —lo que entró menos lo que salió— para ver qué rinde y qué no.
+ * Una sola, no dos. Separar "estado" de "números" era una división mía sin
+ * fundamento: quien abre la app quiere ver el stock, los animales y la plata
+ * del mes en la misma vista, no elegir pestaña según qué pregunta tenga.
  *
- * No hay pantalla de configuración: tocando un lugar, una tanda o un insumo se
- * lo corrige o se lo borra ahí mismo. Crear ya se hace al cargar, así que lo
- * único que hacía falta era poder corregir.
- *
- * Nada de esto está guardado: sale de recorrer los movimientos en cada consulta.
+ * Arriba lo que hay ahora, que no depende de fechas. Abajo lo que pasó en el
+ * período elegido. Y cualquier número se toca para llegar a los movimientos
+ * que lo forman.
  */
 
 import { useState } from 'react'
 
 import { api } from '../api.js'
-import type { AnimalApi, EstadoApi, Registro, UnidadApi } from '../api.js'
-import { Aviso, Campo, EditarRegistro, Selector, useDatos, Vacio } from '../comun.js'
-import { entero, hoy, pesos, pesosExactos } from '../dinero.js'
+import type { AnimalApi, EstadoApi, MovimientoApi, Registro, UnidadApi } from '../api.js'
+import { Abrible, Aviso, Campo, EditarRegistro, Selector, useDatos, Vacio } from '../comun.js'
+import { entero, hoy, mesEnCurso, pesos, pesosExactos } from '../dinero.js'
 
 type Tanda = EstadoApi['tandas'][number]
 
-export function Estado() {
+export function Inicio() {
+  const inicial = mesEnCurso()
+  const [desde, setDesde] = useState(inicial.desde)
+  const [hasta, setHasta] = useState(inicial.hasta)
+  const [abiertos, setAbiertos] = useState<Set<string>>(new Set())
+  const [editando, setEditando] = useState<string | null>(null)
+  const [detalle, setDetalle] = useState<string[] | null>(null)
+
   const estado = useDatos(() => api.estado())
+  const animales = useDatos(() => api.animales())
   const especies = useDatos(() => api.listar('especie'))
   const razas = useDatos(() => api.listar('raza'))
   const tipos = useDatos(() => api.listar('categoria'))
-  const animales = useDatos(() => api.animales())
 
-  const [abiertos, setAbiertos] = useState<Set<string>>(new Set())
-  const [editando, setEditando] = useState<string | null>(null)
+  const rango = { desde, hasta }
+  const resultado = useDatos(() => api.resultado(rango), [desde, hasta])
+  const rubros = useDatos(() => api.rubros(rango), [desde, hasta])
+  const ventas = useDatos(() => api.ventas(rango), [desde, hasta])
+  const nombres = useDatos(async () => {
+    const listas = await Promise.all([
+      api.listar('insumo'),
+      api.listar('producto'),
+      api.listar('rubro_gasto'),
+      api.listar('contraparte'),
+    ])
+    const mapa = new Map<string, string>()
+    for (const lista of listas) for (const r of lista as Registro[]) mapa.set(r.id, (r['nombre'] as string) ?? r.id)
+    return mapa
+  }, [])
 
   if (estado.cargando) return <Vacio>Cargando…</Vacio>
   if (estado.error !== null) return <Aviso clase="error">{estado.error}</Aviso>
@@ -40,6 +58,7 @@ export function Estado() {
     estado.recargar()
     animales.recargar()
   }
+  const nombre = (id: string): string => nombres.datos?.get(id) ?? id
 
   const alternar = (id: string) =>
     setAbiertos((previos) => {
@@ -52,23 +71,48 @@ export function Estado() {
   const activas = datos.tandas.filter((t) => !t.cerrada)
   const raices = datos.unidades.filter((u) => u.unidadPadreId === null)
   const sinLugar = activas.filter((t) => t.unidadId === null)
-
-  const totalAnimales = activas.reduce((s, t) => s + BigInt(t.animales), 0n)
   const valorDeposito = datos.deposito.reduce((s, d) => s + BigInt(d.centavos), 0n)
   const cerradas = datos.tandas.length - activas.length
 
-  const opciones = {
-    unidades: datos.unidades as unknown as Registro[],
-    especies: (especies.datos ?? []) as Registro[],
-    razas: (razas.datos ?? []) as Registro[],
-    tipos: (tipos.datos ?? []) as Registro[],
-    animales: animales.datos ?? [],
+  const comun = {
+    editando,
+    alEditar: setEditando,
+    recargar,
+    opciones: {
+      unidades: datos.unidades as unknown as Registro[],
+      especies: (especies.datos ?? []) as Registro[],
+      razas: (razas.datos ?? []) as Registro[],
+      tipos: (tipos.datos ?? []) as Registro[],
+      animales: animales.datos ?? [],
+    },
   }
-
-  const comun = { editando, alEditar: setEditando, recargar, opciones }
 
   return (
     <>
+      {/* Lo primero que se ve: cuánto hay y cómo viene el mes. */}
+      <section className="tarjeta encabezado">
+        <div className="cifras">
+          <div>
+            <span className="cifra">{entero(datos.totales.animales)}</span>
+            <span className="rotulo-cifra">animales</span>
+          </div>
+          {BigInt(datos.totales.huevos) !== 0n && (
+            <div>
+              <span className="cifra">{entero(datos.totales.huevos)}</span>
+              <span className="rotulo-cifra">huevos</span>
+            </div>
+          )}
+          {resultado.datos !== null && (
+            <div>
+              <span className={`cifra ${BigInt(resultado.datos.diferencia) < 0n ? 'malo' : 'bueno'}`}>
+                {pesos(resultado.datos.diferencia)}
+              </span>
+              <span className="rotulo-cifra">en el período</span>
+            </div>
+          )}
+        </div>
+      </section>
+
       {datos.avisos.length > 0 && (
         <section className="tarjeta">
           <h2>Avisos</h2>
@@ -113,51 +157,26 @@ export function Estado() {
           </div>
         )}
 
-        <div className="resumen-granja">
-          <span>
-            <strong>{entero(totalAnimales)}</strong> animales en total
-          </span>
-          {cerradas > 0 && (
-            <span className="apagado">
-              {cerradas} tanda{cerradas === 1 ? '' : 's'} cerrada{cerradas === 1 ? '' : 's'}
-            </span>
-          )}
-        </div>
-      </section>
-
-      {(BigInt(datos.general.egresos) !== 0n || BigInt(datos.general.ingresos) !== 0n) && (
-        <section className="tarjeta">
-          <h2>Sin asignar a un lugar</h2>
-          <p style={{ margin: 0, color: '#666', fontSize: '0.88rem' }}>
-            De toda la granja: el contador, la patente, una compra al depósito todavía sin repartir.
+        {cerradas > 0 && (
+          <p className="apagado" style={{ marginTop: '0.75rem', fontSize: '0.85rem' }}>
+            {cerradas} tanda{cerradas === 1 ? '' : 's'} cerrada{cerradas === 1 ? '' : 's'}: se vendieron o se
+            trasladaron enteras. Sus números siguen contando abajo.
           </p>
-          <table style={{ marginTop: '0.75rem' }}>
-            <tbody>
-              <tr>
-                <td>Salió</td>
-                <td className="numero">{pesos(datos.general.egresos)}</td>
-              </tr>
-              <tr>
-                <td>Entró</td>
-                <td className="numero">{pesos(datos.general.ingresos)}</td>
-              </tr>
-            </tbody>
-          </table>
-        </section>
-      )}
+        )}
+      </section>
 
       <section className="tarjeta">
         <h2>Depósito</h2>
 
         {datos.deposito.length === 0 ? (
-          <Vacio>No hay insumos cargados todavía. Se crean al registrar una compra.</Vacio>
+          <Vacio>Sin insumos. Se crean al registrar una compra.</Vacio>
         ) : (
           <table>
             <thead>
               <tr>
                 <th>Insumo</th>
-                <th className="numero">Existencia</th>
-                <th className="numero">Costo unitario</th>
+                <th className="numero">Quedan</th>
+                <th className="numero">Por bolsa</th>
                 <th className="numero">Valor</th>
               </tr>
             </thead>
@@ -175,7 +194,7 @@ export function Estado() {
                     <td className="numero">{pesos(d.centavos)}</td>
                   </tr>
                   {editando === `insumo:${d.id}` && (
-                    <tr key={`${d.id}-editor`}>
+                    <tr key={`${d.id}-e`}>
                       <td colSpan={4}>
                         <EditarRegistro
                           tabla="insumo"
@@ -202,6 +221,126 @@ export function Estado() {
           </table>
         )}
       </section>
+
+      {/* --- de acá para abajo, todo depende del período --- */}
+
+      <section className="tarjeta">
+        <h2>El período</h2>
+        <div className="fila">
+          <Campo etiqueta="Desde">
+            <input type="date" value={desde} onChange={(e) => setDesde(e.target.value)} />
+          </Campo>
+          <Campo etiqueta="Hasta">
+            <input type="date" value={hasta} onChange={(e) => setHasta(e.target.value)} />
+          </Campo>
+        </div>
+
+        {resultado.datos !== null && (
+          <table>
+            <tbody>
+              <tr>
+                <td>Entró</td>
+                <td className="numero">{pesos(resultado.datos.ventas)}</td>
+              </tr>
+              <tr>
+                <td>Salió</td>
+                <td className="numero">{pesos(resultado.datos.gastos)}</td>
+              </tr>
+              <tr className="total">
+                <td>Diferencia</td>
+                <td className="numero">{pesos(resultado.datos.diferencia)}</td>
+              </tr>
+            </tbody>
+          </table>
+        )}
+
+        <a className="descarga" href={`/api/v1/export.csv?desde=${desde}&hasta=${hasta}`} download>
+          ⭳ Bajar todas las cargas del período
+        </a>
+      </section>
+
+      <section className="tarjeta">
+        <h2>En qué se fue</h2>
+        {rubros.datos === null || rubros.datos.filas.length === 0 ? (
+          <Vacio>Sin gastos en el período.</Vacio>
+        ) : (
+          <table>
+            <tbody>
+              {rubros.datos.filas.map((f) => (
+                <tr key={f.refId}>
+                  <td>{nombre(f.refId)}</td>
+                  <td className="numero">
+                    <Abrible valor={pesos(f.centavos)} ids={f.movimientoIds} alAbrir={setDetalle} />
+                  </td>
+                  <td className="numero apagado">{f.participacion === null ? '' : `${f.participacion}%`}</td>
+                </tr>
+              ))}
+              <tr className="total">
+                <td>Total</td>
+                <td className="numero">{pesos(rubros.datos.total)}</td>
+                <td />
+              </tr>
+            </tbody>
+          </table>
+        )}
+      </section>
+
+      <section className="tarjeta">
+        <h2>Qué se vendió</h2>
+        {ventas.datos === null || ventas.datos.filas.length === 0 ? (
+          <Vacio>Sin ventas en el período.</Vacio>
+        ) : (
+          <>
+            <table>
+              <thead>
+                <tr>
+                  <th>Producto</th>
+                  <th className="numero">Cant.</th>
+                  <th className="numero">Importe</th>
+                </tr>
+              </thead>
+              <tbody>
+                {ventas.datos.filas.map((f) => (
+                  <tr key={f.refId}>
+                    <td>{nombre(f.refId)}</td>
+                    <td className="numero">{entero(f.cantidad)}</td>
+                    <td className="numero">
+                      <Abrible valor={pesos(f.centavos)} ids={f.movimientoIds} alAbrir={setDetalle} />
+                    </td>
+                  </tr>
+                ))}
+                <tr className="total">
+                  <td>Total</td>
+                  <td />
+                  <td className="numero">{pesos(ventas.datos.total)}</td>
+                </tr>
+              </tbody>
+            </table>
+
+            {ventas.datos.deuda.filas.length > 0 && (
+              <>
+                <h2 style={{ marginTop: '1.5rem' }}>Quién debe</h2>
+                <table>
+                  <tbody>
+                    {ventas.datos.deuda.filas.map((d) => (
+                      <tr key={d.contraparteId}>
+                        <td>{nombre(d.contraparteId)}</td>
+                        <td className="numero">{pesos(d.saldo)}</td>
+                      </tr>
+                    ))}
+                    <tr className="total">
+                      <td>Total adeudado</td>
+                      <td className="numero">{pesos(ventas.datos.deuda.total)}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </>
+            )}
+          </>
+        )}
+      </section>
+
+      {detalle !== null && <Detalle ids={detalle} alCerrar={() => setDetalle(null)} nombre={nombre} />}
     </>
   )
 }
@@ -219,7 +358,6 @@ interface Comun {
   }
 }
 
-/** Un lugar y todo lo que cuelga de él: sus lugares hijos y sus tandas. */
 function Rama({
   unidad,
   todas,
@@ -243,7 +381,6 @@ function Rama({
   const suyas = tandas.filter((t) => t.unidadId === unidad.id)
   const cerrado = abiertos.has(unidad.id)
   const tieneAlgo = hijas.length > 0 || suyas.length > 0
-  const resultado = BigInt(unidad.resultado)
   const especies = Object.entries(unidad.animalesPorEspecie)
   const clave = `unidad:${unidad.id}`
 
@@ -273,11 +410,9 @@ function Rama({
               )}
             </span>
           )}
+          {BigInt(unidad.huevos) > 0n && <span className="chip huevos">{entero(unidad.huevos)} hv</span>}
           {BigInt(unidad.costoCentavos) !== 0n && (
-            <span className={`chip ${resultado < 0n ? 'malo' : resultado > 0n ? 'bueno' : ''}`}>
-              {resultado >= 0n ? '+' : ''}
-              {pesos(resultado)}
-            </span>
+            <span className="chip apagado">{pesos(unidad.costoCentavos)}</span>
           )}
         </span>
       </div>
@@ -349,7 +484,6 @@ function FilaTanda({
   recargar,
   opciones,
 }: { tanda: Tanda; nivel: number } & Comun) {
-  const resultado = BigInt(tanda.resultado)
   const clave = `tanda:${tanda.id}`
   const suyos = opciones.animales.filter((a) => a.tandaId === tanda.id)
   const llevaNombres = tanda.categoria?.['animalesConNombre'] === true
@@ -371,11 +505,9 @@ function FilaTanda({
 
         <span className="datos-nodo">
           {BigInt(tanda.animales) !== 0n && <span className="chip">{entero(tanda.animales)}</span>}
+          {BigInt(tanda.huevos) !== 0n && <span className="chip huevos">{entero(tanda.huevos)} hv</span>}
           {BigInt(tanda.costoCentavos) !== 0n && (
-            <span className={`chip ${resultado < 0n ? 'malo' : resultado > 0n ? 'bueno' : ''}`}>
-              {resultado >= 0n ? '+' : ''}
-              {pesos(resultado)}
-            </span>
+            <span className="chip apagado">{pesos(tanda.costoCentavos)}</span>
           )}
         </span>
       </div>
@@ -406,15 +538,6 @@ function FilaTanda({
                 ],
               },
               {
-                clave: 'especieId',
-                etiqueta: 'Especie',
-                tipo: 'opciones',
-                opciones: [
-                  { valor: '', etiqueta: 'Sin definir' },
-                  ...opciones.especies.map((e) => ({ valor: e.id, etiqueta: (e['nombre'] as string) ?? e.id })),
-                ],
-              },
-              {
                 clave: 'razaId',
                 etiqueta: 'Raza',
                 tipo: 'opciones',
@@ -423,14 +546,11 @@ function FilaTanda({
                   ...opciones.razas.map((r) => ({ valor: r.id, etiqueta: (r['nombre'] as string) ?? r.id })),
                 ],
               },
-              { clave: 'fechaInicio', etiqueta: 'Empezó el' },
             ]}
             alCambiar={recargar}
             alCerrar={() => alEditar(null)}
           />
 
-          {/* Los animales con nombre viven acá, dentro de su tanda: es donde uno
-              los busca, no en una pantalla aparte. */}
           {llevaNombres && (
             <AnimalesDeLaTanda
               tandaId={tanda.id}
@@ -446,12 +566,6 @@ function FilaTanda({
   )
 }
 
-/**
- * Los animales con nombre de una tanda, con lo que rindió cada uno.
- *
- * Sólo aparece en tandas cuyo tipo lleva animales con nombre: seis conejas
- * madre se siguen de a una, novecientos parrilleros no.
- */
 function AnimalesDeLaTanda({
   tandaId,
   especieId,
@@ -489,9 +603,7 @@ function AnimalesDeLaTanda({
       </h3>
 
       {animales.length === 0 ? (
-        <p style={{ margin: '0 0 0.6rem', fontSize: '0.88rem', color: '#666' }}>
-          Todavía no hay ninguno cargado.
-        </p>
+        <p style={{ margin: '0 0 0.6rem', fontSize: '0.88rem', color: '#666' }}>Todavía no hay ninguno.</p>
       ) : (
         <table>
           <thead>
@@ -545,5 +657,54 @@ function AnimalesDeLaTanda({
         </button>
       </form>
     </div>
+  )
+}
+
+/** Los movimientos detrás de un número (§6.6). */
+function Detalle({
+  ids,
+  alCerrar,
+  nombre,
+}: {
+  ids: string[]
+  alCerrar: () => void
+  nombre: (id: string) => string
+}) {
+  const { datos, error } = useDatos(() => api.movimientos(), [])
+  const movimientos = (datos ?? []).filter((m: MovimientoApi) => ids.includes(m.id))
+
+  return (
+    <section className="tarjeta" style={{ borderColor: '#1b5e20' }}>
+      <h2>De dónde sale ese número</h2>
+      {error !== null && <Aviso clase="error">{error}</Aviso>}
+
+      <table>
+        <thead>
+          <tr>
+            <th>Fecha</th>
+            <th>Qué</th>
+            <th className="numero">Cant.</th>
+            <th className="numero">Importe</th>
+          </tr>
+        </thead>
+        <tbody>
+          {movimientos.map((m) => (
+            <tr key={m.id}>
+              <td>{m.fecha}</td>
+              <td>
+                {m.tipo.replace(/_/g, ' ')}
+                {m.refId !== undefined && <div style={{ fontSize: '0.78rem', color: '#666' }}>{nombre(m.refId)}</div>}
+              </td>
+              <td className="numero">{entero(m.cantidad)}</td>
+              <td className="numero">{m.importe === undefined ? '—' : pesos(m.importe)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+
+      <button type="button" className="fantasma" onClick={alCerrar} style={{ marginTop: '1rem' }}>
+        Cerrar
+      </button>
+    </section>
   )
 }

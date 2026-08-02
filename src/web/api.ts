@@ -126,6 +126,7 @@ export interface UnidadApi extends Registro {
   unidadPadreId: string | null
   tandas: number
   animales: string
+  huevos: string
   animalesPorEspecie: Record<string, string>
   costoPropio: string
   costoCentavos: string
@@ -143,6 +144,7 @@ export interface EstadoApi {
       huevosCargados: string
       nacidos: string
       huevosRecolectados: string
+      huevos: string
       diasAbierta: number
       unidadId: string | null
       especieId: string | null
@@ -158,6 +160,7 @@ export interface EstadoApi {
     Registro & { unidades: string; centavos: string; costoUnitario: number | null; bajoMinimo: boolean }
   >
   general: { egresos: string; ingresos: string; movimientoIds: string[] }
+  totales: { animales: string; huevos: string }
   avisos: Array<{ movimientoId: string; clase: string; detalle: string }>
 }
 

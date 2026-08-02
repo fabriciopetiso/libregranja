@@ -394,6 +394,36 @@ ol.pasos li.hecho::before {
   color: var(--verde);
 }
 
+/* El encabezado: lo que importa de un vistazo, sin tener que leer una tabla. */
+section.tarjeta.encabezado { padding: 1.1rem 1rem; }
+
+.cifras {
+  display: flex;
+  gap: 1.5rem;
+  flex-wrap: wrap;
+}
+
+.cifras > div { display: flex; flex-direction: column; }
+
+.cifra {
+  font-size: 1.6rem;
+  font-weight: 700;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+}
+
+.cifra.bueno { color: var(--verde); }
+.cifra.malo { color: var(--rojo); }
+
+.rotulo-cifra {
+  font-size: 0.78rem;
+  color: var(--gris);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.chip.huevos { background: #fff8e1; color: var(--ambar); }
+
 /* Lo que se puede tocar para corregir se ve distinto de lo que es sólo texto.
    No hay pantalla de configuración: cada cosa se edita donde aparece. */
 button.editable {
