@@ -12,11 +12,14 @@ export function Estado() {
   if (datos === null) return null
 
   const activas = datos.tandas.filter((t) => t['fechaCierre'] === null)
-  const porCategoria = new Map<string, typeof activas>()
 
+  // Agrupadas por lugar, no por categoría: es como se recorre la granja.
+  // Las que no tienen lugar asignado quedan juntas al final, no se esconden.
+  const porUnidad = new Map<string, typeof activas>()
   for (const tanda of activas) {
-    const clave = (tanda.categoria?.['nombre'] as string | undefined) ?? 'Sin categoría'
-    porCategoria.set(clave, [...(porCategoria.get(clave) ?? []), tanda])
+    const unidad = datos.unidades.find((u) => u.id === tanda.unidadId)
+    const clave = unidad?.nombre ?? 'Sin lugar asignado'
+    porUnidad.set(clave, [...(porUnidad.get(clave) ?? []), tanda])
   }
 
   const totalAnimales = activas.reduce((s, t) => s + BigInt(t.animales), 0n)
@@ -37,7 +40,12 @@ export function Estado() {
         <h2>Tandas activas</h2>
 
         {activas.length === 0 ? (
-          <Vacio>No hay tandas abiertas. Creá una en Configuración.</Vacio>
+          <Vacio>
+            Todavía no hay nada cargado.{' '}
+            <a href="/comenzar" style={{ color: '#1b5e20' }}>
+              Empezar por acá
+            </a>
+          </Vacio>
         ) : (
           <table>
             <thead>
@@ -48,17 +56,22 @@ export function Estado() {
                 <th className="numero">Costo</th>
               </tr>
             </thead>
-            {[...porCategoria.entries()].map(([categoria, tandas]) => (
-              <tbody key={categoria}>
+            {[...porUnidad.entries()].map(([unidad, tandas]) => (
+              <tbody key={unidad}>
                 <tr>
                   <td colSpan={4} style={{ paddingTop: '0.9rem', color: '#666', fontSize: '0.8rem' }}>
-                    {categoria.toUpperCase()}
+                    {unidad.toUpperCase()}
                   </td>
                 </tr>
                 {tandas.map((t) => (
                   <tr key={t.id}>
                     <td>
                       {t['nombre'] as string}
+                      {t.categoria !== null && (
+                        <div style={{ fontSize: '0.75rem', color: '#999' }}>
+                          {t.categoria['nombre'] as string}
+                        </div>
+                      )}
                       {t.incubacion !== null && t.incubacion.sobreCargados !== null && (
                         <div style={{ fontSize: '0.78rem', color: '#666' }}>
                           {entero(t.nacidos)} de {entero(t.huevosCargados)} huevos ·{' '}

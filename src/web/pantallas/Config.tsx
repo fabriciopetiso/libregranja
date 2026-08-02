@@ -30,6 +30,7 @@ const CAPACIDADES: Array<{ clave: string; etiqueta: string }> = [
  * las de abajo, que son justamente las que hay que tocar primero.
  */
 const SECCIONES = [
+  { clave: 'unidades', etiqueta: 'Lugares' },
   { clave: 'tandas', etiqueta: 'Tandas' },
   { clave: 'animales', etiqueta: 'Animales' },
   { clave: 'categorias', etiqueta: 'Categorías' },
@@ -61,6 +62,7 @@ export function Config({ rol }: { rol: 'admin' | 'operador' }) {
         ))}
       </nav>
 
+      {seccion === 'unidades' && <Unidades />}
       {seccion === 'tandas' && <Tandas alIrA={setSeccion} />}
       {seccion === 'animales' && <Animales />}
       {seccion === 'categorias' && <Categorias alIrA={setSeccion} />}
@@ -381,12 +383,46 @@ function Categorias({ alIrA }: { alIrA: (s: Seccion) => void }) {
   )
 }
 
+function Unidades() {
+  const { lista, mensaje, crear, anular } = useCrud('unidad')
+  const [nombre, setNombre] = useState('')
+
+  return (
+    <section className="tarjeta">
+      <h2>Lugares</h2>
+      <p style={{ marginTop: 0, color: '#666', fontSize: '0.88rem' }}>
+        Dónde están los animales: el gallinero, la conejera, la incubadora. Adentro de cada uno puede
+        haber varias tandas con propósitos distintos.
+      </p>
+      <Lista items={lista} alBorrar={(id) => void anular(id)} />
+
+      <form
+        className="fila"
+        style={{ marginTop: '0.75rem' }}
+        onSubmit={(e) => {
+          e.preventDefault()
+          void crear({ nombre }).then((ok) => ok && setNombre(''))
+        }}
+      >
+        <input value={nombre} onChange={(e) => setNombre(e.target.value)} placeholder="Gallinero 1" />
+        <button type="submit" className="fantasma" style={{ flex: '0 0 auto', width: 'auto' }} disabled={nombre === ''}>
+          Agregar
+        </button>
+      </form>
+
+      {mensaje !== null && <Aviso clase="error">{mensaje}</Aviso>}
+    </section>
+  )
+}
+
 function Tandas({ alIrA }: { alIrA: (s: Seccion) => void }) {
   const { lista, mensaje, crear } = useCrud('tanda')
   const categorias = useDatos(() => api.listar('categoria'))
+  const unidades = useDatos(() => api.listar('unidad'))
 
   const [nombre, setNombre] = useState('')
   const [categoriaId, setCategoriaId] = useState('')
+  const [unidadId, setUnidadId] = useState('')
   const [fechaInicio, setFechaInicio] = useState(hoy())
 
   const disponibles = (categorias.datos ?? []) as Registro[]
@@ -409,11 +445,14 @@ function Tandas({ alIrA }: { alIrA: (s: Seccion) => void }) {
         style={{ marginTop: '0.75rem' }}
         onSubmit={(e) => {
           e.preventDefault()
-          void crear({ nombre, categoriaId, fechaInicio }).then((ok) => ok && setNombre(''))
+          void crear({ nombre, categoriaId, unidadId, fechaInicio }).then((ok) => ok && setNombre(''))
         }}
       >
         <Campo etiqueta="Nombre">
           <input value={nombre} onChange={(e) => setNombre(e.target.value)} placeholder="Engorde marzo" />
+        </Campo>
+        <Campo etiqueta="¿En qué lugar?">
+          <Selector valor={unidadId} alCambiar={setUnidadId} opciones={(unidades.datos ?? []) as Registro[]} />
         </Campo>
         <div className="fila">
           <Campo etiqueta="Categoría">

@@ -12,6 +12,12 @@
 
 const PENDIENTES = 'libregranja.pendientes'
 
+export interface GranjaApi {
+  id: string
+  nombre: string
+  rol: 'admin' | 'operador'
+}
+
 export interface Sesion {
   id: string
   granjaId: string
@@ -50,7 +56,13 @@ export const api = {
 
   salir: () => pedir<{ ok: true }>('/sesion', { method: 'DELETE' }),
 
-  yo: () => pedir<{ usuario: Sesion }>('/yo'),
+  yo: () => pedir<{ usuario: Sesion; granjas: GranjaApi[] }>('/yo'),
+
+  crearGranja: (nombre: string) =>
+    pedir<{ id: string; nombre: string }>('/granjas', { method: 'POST', body: JSON.stringify({ nombre }) }),
+
+  cambiarGranja: (granjaId: string) =>
+    pedir<{ ok: true }>('/granja-activa', { method: 'POST', body: JSON.stringify({ granjaId }) }),
 
   listar: <T = Registro>(tabla: string) => pedir<T[]>(`/catalogo/${tabla}`),
 
@@ -101,7 +113,16 @@ export interface MovimientoApi {
   motivo?: string
 }
 
+export interface UnidadApi extends Registro {
+  nombre: string
+  nota: string | null
+  tandas: number
+  animales: string
+  costoCentavos: string
+}
+
 export interface EstadoApi {
+  unidades: UnidadApi[]
   tandas: Array<
     Registro & {
       animales: string
@@ -110,6 +131,7 @@ export interface EstadoApi {
       nacidos: string
       huevosRecolectados: string
       diasAbierta: number
+      unidadId: string | null
       categoria: Registro | null
       incubacion: { sobreCargados: number | null; sobreFertiles: number | null } | null
     }

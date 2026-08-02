@@ -139,6 +139,29 @@ se llega a ese techo. Si algún día se llega, el punto anterior cubre la salida
 
 ---
 
+### R7 · Un nivel entre la granja y la tanda
+
+La spec va de granja a tanda directamente. Con diez o veinte tandas simultáneas eso
+es una lista plana donde no se encuentra nada, y no hay forma de preguntar "cuánto me
+cuesta el gallinero".
+
+Se agrega la **unidad productiva**: el gallinero, la conejera, la incubadora, el
+chiquero. Es un agrupador y nada más: no tiene capacidades ni tipo. Qué se registra en
+cada tanda lo sigue definiendo su categoría.
+
+```
+Granja → Unidad productiva → Tanda → Animales con nombre
+```
+
+Dentro de una misma unidad conviven tandas de propósitos distintos: en el mismo
+gallinero, reproductoras Negra INTA y parrilleros de engorde.
+
+### R8 · Multi-granja de verdad
+
+`usuario_granja` dice a qué granjas tiene acceso cada persona y con qué rol en cada
+una. `usuario.granja_id` queda como la granja con la que abre la sesión. Cambiar de
+granja cambia todo lo que se ve; los datos están completamente separados.
+
 ## Abierto
 
 - **VPS y dominio.** Con 1 vCPU y 1 GB de RAM sobra: Debian 12 o Ubuntu 24.04.

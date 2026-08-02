@@ -10,6 +10,8 @@
  * el resto del sistema evita. El cliente los vuelve a BigInt al recibirlos.
  */
 
+import { randomUUID } from 'node:crypto'
+
 import { Hono } from 'hono'
 import { deleteCookie, getCookie, setCookie } from 'hono/cookie'
 import type { Context, MiddlewareHandler } from 'hono'
@@ -26,6 +28,7 @@ import {
 import type { Rango } from '../core/reportes.js'
 import type { Catalogo } from '../core/tipos.js'
 import type { Base } from '../db/conexion.js'
+import { sembrarValoresIniciales } from '../db/inicializar.js'
 import * as repos from '../db/repos.js'
 import { autenticar, cerrarSesion, crearSesion, crearUsuario, usuarioDeSesion } from './auth.js'
 import type { Usuario } from './auth.js'
@@ -141,7 +144,71 @@ export function crearApi(base: Base): Hono<Entorno> {
 
   api.use('*', pedirSesion)
 
-  api.get('/yo', (c) => json({ usuario: c.get('usuario') }))
+  api.get('/yo', (c) => {
+    const usuario = c.get('usuario')
+    const granjas = base
+      .prepare(
+        `SELECT g.id, g.nombre, ug.rol
+         FROM usuario_granja ug
+         JOIN granja g ON g.id = ug.granja_id
+         WHERE ug.usuario_id = ? AND g.eliminado = 0
+         ORDER BY g.nombre COLLATE NOCASE`,
+      )
+      .all(usuario.id)
+
+    return json({ usuario, granjas })
+  })
+
+  // --- granjas --------------------------------------------------------------
+
+  /**
+   * Crear una granja nueva. Quien la crea queda como admin de ella.
+   *
+   * Una persona puede llevar más de una granja —la propia y la de un vecino, o
+   * dos establecimientos— y cada una tiene sus datos completamente separados.
+   */
+  api.post('/granjas', async (c) => {
+    const cuerpo = await c.req.json().catch(() => null)
+    const datos = z.object({ nombre: z.string().min(1) }).safeParse(cuerpo)
+    if (!datos.success) return json({ error: 'falta el nombre' }, 400)
+
+    const usuario = c.get('usuario')
+    const granjaId = randomUUID()
+    const momento = new Date().toISOString()
+
+    const crearTodo = base.transaction(() => {
+      base
+        .prepare('INSERT INTO granja (id, nombre, creado_en, modificado_en, eliminado) VALUES (?, ?, ?, ?, 0)')
+        .run(granjaId, datos.data.nombre, momento, momento)
+      base
+        .prepare('INSERT INTO usuario_granja (usuario_id, granja_id, rol, creado_en) VALUES (?, ?, ?, ?)')
+        .run(usuario.id, granjaId, 'admin', momento)
+      sembrarValoresIniciales(base, granjaId, momento)
+    })
+
+    crearTodo()
+    return json({ id: granjaId, nombre: datos.data.nombre }, 201)
+  })
+
+  /** Cambiar de granja activa. Sólo a una de las que el usuario es miembro. */
+  api.post('/granja-activa', async (c) => {
+    const cuerpo = await c.req.json().catch(() => null)
+    const datos = z.object({ granjaId: z.string() }).safeParse(cuerpo)
+    if (!datos.success) return json({ error: 'falta granjaId' }, 400)
+
+    const usuario = c.get('usuario')
+    const membresia = base
+      .prepare('SELECT rol FROM usuario_granja WHERE usuario_id = ? AND granja_id = ?')
+      .get(usuario.id, datos.data.granjaId) as { rol: 'admin' | 'operador' } | undefined
+
+    if (membresia === undefined) return json({ error: 'no sos miembro de esa granja' }, 403)
+
+    base
+      .prepare('UPDATE usuario SET granja_id = ?, rol = ?, modificado_en = ? WHERE id = ?')
+      .run(datos.data.granjaId, membresia.rol, new Date().toISOString(), usuario.id)
+
+    return json({ ok: true })
+  })
 
   // --- catálogos ------------------------------------------------------------
 
@@ -249,9 +316,27 @@ export function crearApi(base: Base): Hono<Entorno> {
     const tandas = repos.listar(base, 'tanda', granjaId)
     const categorias = new Map(repos.listar(base, 'categoria', granjaId).map((x) => [x['id'] as string, x]))
     const insumos = repos.listar(base, 'insumo', granjaId)
+    const unidades = repos.listar(base, 'unidad', granjaId)
     const hoy = new Date()
 
+    /**
+     * Resumen por unidad productiva: cuánto hay y cuánto costó cada lugar.
+     *
+     * Es la pregunta que una lista plana de veinte tandas no contesta: "¿cuánto
+     * me cuesta el gallinero?".
+     */
+    const resumenUnidades = unidades.map((u) => {
+      const suyas = tandas.filter((t) => t['unidadId'] === u['id'])
+      return {
+        ...u,
+        tandas: suyas.length,
+        animales: suyas.reduce((s, t) => s + (estado.tandas.get(t['id'] as string)?.animales ?? 0n), 0n),
+        costoCentavos: suyas.reduce((s, t) => s + (estado.tandas.get(t['id'] as string)?.costoCentavos ?? 0n), 0n),
+      }
+    })
+
     return json({
+      unidades: resumenUnidades,
       tandas: tandas.map((t) => {
         const calculado = estado.tandas.get(t['id'] as string)
         const inicio = new Date(String(t['fechaInicio']))

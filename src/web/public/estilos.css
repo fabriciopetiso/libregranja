@@ -250,6 +250,63 @@ button.chico {
   font-weight: 400;
 }
 
+/* Lista de pasos de los primeros pasos. El que corresponde ahora se destaca;
+   los hechos quedan en verde y no se esconden, para que se vea el avance. */
+ol.pasos {
+  list-style: none;
+  counter-reset: paso;
+  margin: 0;
+  padding: 0;
+}
+
+ol.pasos li {
+  counter-increment: paso;
+  position: relative;
+  padding: 0.6rem 0 0.6rem 2.2rem;
+  color: var(--gris);
+  border-bottom: var(--borde);
+}
+
+ol.pasos li:last-child {
+  border-bottom: none;
+}
+
+ol.pasos li::before {
+  content: counter(paso);
+  position: absolute;
+  left: 0;
+  top: 0.55rem;
+  width: 1.6rem;
+  height: 1.6rem;
+  border-radius: 50%;
+  background: var(--gris-suave);
+  color: var(--gris);
+  font-size: 0.8rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+ol.pasos li.actual {
+  color: var(--tinta);
+}
+
+ol.pasos li.actual::before {
+  background: var(--verde);
+  color: #fff;
+}
+
+ol.pasos li.hecho {
+  color: var(--verde);
+}
+
+ol.pasos li.hecho::before {
+  content: '✓';
+  background: var(--verde-claro);
+  color: var(--verde);
+}
+
 /* Alta de un ítem sin salir de la pantalla de carga. Se distingue del resto
    del formulario para que quede claro que es otra cosa la que se está creando. */
 .alta-rapida {

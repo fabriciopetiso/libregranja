@@ -1,10 +1,9 @@
 import { useState } from 'react'
 
 import { api } from '../api.js'
-import type { Sesion } from '../api.js'
 import { Campo } from '../comun.js'
 
-export function Ingreso({ alEntrar }: { alEntrar: (s: Sesion) => void }) {
+export function Ingreso({ alEntrar }: { alEntrar: () => void }) {
   const [usuario, setUsuario] = useState('')
   const [clave, setClave] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -17,7 +16,7 @@ export function Ingreso({ alEntrar }: { alEntrar: (s: Sesion) => void }) {
 
     api
       .entrar(usuario, clave)
-      .then((r) => alEntrar(r.usuario))
+      .then(() => alEntrar())
       .catch((err: unknown) => setError(err instanceof Error ? err.message : 'no se pudo entrar'))
       .finally(() => setEntrando(false))
   }

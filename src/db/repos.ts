@@ -34,6 +34,7 @@ const BOOLEANAS = new Set([
 const EXACTAS = new Set(['cantidad', 'importe'])
 
 export const TABLAS = [
+  'unidad',
   'especie',
   'plantilla',
   'categoria',

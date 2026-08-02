@@ -40,14 +40,14 @@ export interface GranjaNueva {
   admin: { nombre: string; usuario: string; clave: string }
 }
 
-export async function crearGranja(base: Base, datos: GranjaNueva): Promise<{ granjaId: string; adminId: string }> {
-  const granjaId = randomUUID()
-  const momento = new Date().toISOString()
-
-  base
-    .prepare('INSERT INTO granja (id, nombre, creado_en, modificado_en, eliminado) VALUES (?, ?, ?, ?, 0)')
-    .run(granjaId, datos.nombre, momento, momento)
-
+/**
+ * Carga los valores iniciales de una granja recién creada.
+ *
+ * Se usa tanto al crear la primera granja desde la línea de comandos como al
+ * crear una más desde la app: toda granja arranca con lo mismo, y desde ahí el
+ * usuario lo edita.
+ */
+export function sembrarValoresIniciales(base: Base, granjaId: string, momento: string): void {
   const insertarEspecie = base.prepare(
     'INSERT INTO especie (id, granja_id, nombre, creado_en, modificado_en, eliminado) VALUES (?, ?, ?, ?, ?, 0)',
   )
@@ -61,31 +61,45 @@ export async function crearGranja(base: Base, datos: GranjaNueva): Promise<{ gra
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)`,
   )
 
-  const sembrar = base.transaction(() => {
-    for (const nombre of ESPECIES) insertarEspecie.run(randomUUID(), granjaId, nombre, momento, momento)
-    for (const nombre of RUBROS) insertarRubro.run(randomUUID(), granjaId, nombre, momento, momento)
+  for (const nombre of ESPECIES) insertarEspecie.run(randomUUID(), granjaId, nombre, momento, momento)
+  for (const nombre of RUBROS) insertarRubro.run(randomUUID(), granjaId, nombre, momento, momento)
 
-    for (const { nombre, capacidades } of PLANTILLAS) {
-      const tiene = (c: string): number => (capacidades.includes(c) ? 1 : 0)
-      insertarPlantilla.run(
-        randomUUID(),
-        granjaId,
-        nombre,
-        tiene('animales_con_nombre'),
-        tiene('registra_nacimientos'),
-        tiene('registra_huevos'),
-        tiene('registra_carga_incubacion'),
-        tiene('registra_peso'),
-        tiene('registra_alimento'),
-        momento,
-        momento,
-      )
-    }
+  for (const { nombre, capacidades } of PLANTILLAS) {
+    const tiene = (c: string): number => (capacidades.includes(c) ? 1 : 0)
+    insertarPlantilla.run(
+      randomUUID(),
+      granjaId,
+      nombre,
+      tiene('animales_con_nombre'),
+      tiene('registra_nacimientos'),
+      tiene('registra_huevos'),
+      tiene('registra_carga_incubacion'),
+      tiene('registra_peso'),
+      tiene('registra_alimento'),
+      momento,
+      momento,
+    )
+  }
+}
+
+export async function crearGranja(base: Base, datos: GranjaNueva): Promise<{ granjaId: string; adminId: string }> {
+  const granjaId = randomUUID()
+  const momento = new Date().toISOString()
+
+  const crear = base.transaction(() => {
+    base
+      .prepare('INSERT INTO granja (id, nombre, creado_en, modificado_en, eliminado) VALUES (?, ?, ?, ?, 0)')
+      .run(granjaId, datos.nombre, momento, momento)
+    sembrarValoresIniciales(base, granjaId, momento)
   })
 
-  sembrar()
+  crear()
 
   const admin = await crearUsuario(base, granjaId, { ...datos.admin, rol: 'admin' })
+  base
+    .prepare('INSERT INTO usuario_granja (usuario_id, granja_id, rol, creado_en) VALUES (?, ?, ?, ?)')
+    .run(admin.id, granjaId, 'admin', momento)
+
   return { granjaId, adminId: admin.id }
 }
 
