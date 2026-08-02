@@ -250,6 +250,93 @@ button.chico {
   font-weight: 400;
 }
 
+/* --- árbol de la granja ---------------------------------------------------
+   Se recorre como se recorre el campo: el lugar, y adentro lo que hay. La
+   sangría marca la profundidad; los chips llevan el número al borde derecho
+   para que las columnas se lean de un vistazo. */
+
+.arbol { display: flex; flex-direction: column; }
+
+.nodo { display: flex; flex-direction: column; }
+
+.fila-nodo {
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  padding: .55rem .2rem;
+  border-bottom: 1px solid var(--gris-suave);
+  min-height: 44px;
+}
+
+.fila-nodo:last-child { border-bottom: none; }
+
+.fila-nodo.tanda { background: transparent; }
+
+button.plegar {
+  flex: 0 0 auto;
+  width: 1.6rem;
+  min-height: 1.6rem;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--verde);
+  font-size: .9rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+button.plegar:disabled { color: var(--gris-suave); cursor: default; }
+
+.nombre-nodo {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.fila-nodo.tanda .nombre-nodo { font-weight: 400; }
+
+.nombre-nodo.sin-lugar { color: var(--gris); font-weight: 600; font-size: .85rem; }
+
+.detalle-tanda {
+  display: block;
+  font-size: .76rem;
+  color: var(--gris);
+  font-weight: 400;
+}
+
+.datos-nodo {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: .35rem;
+}
+
+.chip {
+  display: inline-block;
+  padding: .15rem .5rem;
+  border-radius: 999px;
+  background: var(--gris-suave);
+  font-size: .8rem;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.chip.bueno { background: var(--verde-claro); color: var(--verde); }
+.chip.malo { background: #fdecea; color: var(--rojo); }
+.chip .apagado { font-size: .74rem; }
+.apagado { color: var(--gris); }
+
+.resumen-granja {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-top: .9rem;
+  padding-top: .75rem;
+  border-top: 2px solid var(--tinta);
+  font-size: .9rem;
+}
+
 /* Lista de pasos de los primeros pasos. El que corresponde ahora se destaca;
    los hechos quedan en verde y no se esconden, para que se vea el avance. */
 ol.pasos {

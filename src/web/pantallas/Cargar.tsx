@@ -1,53 +1,48 @@
 /**
- * Pantallas de carga (§5).
+ * Pantallas de carga.
  *
- * Nunca se pide un dato que el sistema puede calcular: se escribe el total
- * pagado y el unitario sale solo. Y ninguna validación bloquea: si algo no
- * cierra, se guarda igual y se avisa. Falta un registro anterior, no sobra este.
+ * Organizadas por lo que pasó, no por tipo de cosa: comprar 20 parrilleros y
+ * comprar 20 bolsas de alimento son las dos una compra, y las dos tienen que
+ * estar donde uno las busca. Repartirlas por entidad —insumos acá, animales
+ * allá— obligaba a adivinar en qué solapa mirar.
+ *
+ * Dos reglas que no se rompen:
+ *   · Nunca se pide un dato que el sistema puede calcular. Se escribe el total
+ *     pagado y el unitario sale solo.
+ *   · Ninguna validación bloquea. Si algo no cierra se guarda igual y se avisa:
+ *     falta un registro anterior, no sobra este.
  */
 
 import { useState } from 'react'
 
-import { api, guardarMovimiento } from '../api.js'
+import { api, guardarMovimiento, nuevoId } from '../api.js'
 import type { Registro } from '../api.js'
 import { Aviso, Campo, Selector, SelectorConAlta, SelectorDestino, useDatos, Vacio } from '../comun.js'
 import type { Destino } from '../comun.js'
 import { aCentavos, hoy, pesosExactos } from '../dinero.js'
 
-type Solapa = 'compra' | 'venta' | 'animales'
+type Solapa = 'compre' | 'vendi' | 'paso'
 
 export function Cargar({ alGuardar }: { alGuardar: () => void }) {
-  const [solapa, setSolapa] = useState<Solapa>('compra')
+  const [solapa, setSolapa] = useState<Solapa>('compre')
 
   return (
     <>
-      <div className="fila" style={{ marginBottom: '1rem' }}>
-        <button
-          type="button"
-          className={solapa === 'compra' ? 'principal' : 'fantasma'}
-          onClick={() => setSolapa('compra')}
-        >
-          Compras y gastos
+      <nav className="subpestanas">
+        <button type="button" className={solapa === 'compre' ? 'activa' : ''} onClick={() => setSolapa('compre')}>
+          Compré
         </button>
-        <button
-          type="button"
-          className={solapa === 'venta' ? 'principal' : 'fantasma'}
-          onClick={() => setSolapa('venta')}
-        >
-          Ventas
+        <button type="button" className={solapa === 'vendi' ? 'activa' : ''} onClick={() => setSolapa('vendi')}>
+          Vendí
         </button>
-        <button
-          type="button"
-          className={solapa === 'animales' ? 'principal' : 'fantasma'}
-          onClick={() => setSolapa('animales')}
-        >
-          Animales
+        <button type="button" className={solapa === 'paso' ? 'activa' : ''} onClick={() => setSolapa('paso')}>
+          Pasó algo
         </button>
-      </div>
+      </nav>
 
-      {solapa === 'compra' && <CompraOGasto alGuardar={alGuardar} />}
-      {solapa === 'venta' && <Venta alGuardar={alGuardar} />}
-      {solapa === 'animales' && <Animales alGuardar={alGuardar} />}
+      {solapa === 'compre' && <Compre alGuardar={alGuardar} />}
+      {solapa === 'vendi' && <Vendi alGuardar={alGuardar} />}
+      {solapa === 'paso' && <PasoAlgo alGuardar={alGuardar} />}
     </>
   )
 }
@@ -79,39 +74,192 @@ function useEnvio(alGuardar: () => void) {
   return { mensaje, enviando, enviar }
 }
 
-function CompraOGasto({ alGuardar }: { alGuardar: () => void }) {
-  const insumos = useDatos(() => api.listar('insumo'))
-  const rubros = useDatos(() => api.listar('rubro_gasto'))
+/** Los catálogos que casi todas las pantallas necesitan. */
+function useCatalogos() {
   const tandas = useDatos(() => api.listar('tanda'))
   const unidades = useDatos(() => api.listar('unidad'))
+  const animales = useDatos(() => api.animales())
+
+  const crearLugar = async (nombre: string) => {
+    const creado = (await api.crear('unidad', { nombre })) as Registro
+    unidades.recargar()
+    return creado
+  }
+
+  return {
+    tandas: (tandas.datos ?? []) as Array<Registro & { unidadId?: string | null }>,
+    unidades: (unidades.datos ?? []) as Registro[],
+    animales: animales.datos ?? [],
+    recargarTandas: tandas.recargar,
+    crearLugar,
+  }
+}
+
+// --- Compré ------------------------------------------------------------------
+
+type QueCompre = 'insumo' | 'animales' | 'gasto'
+
+function Compre({ alGuardar }: { alGuardar: () => void }) {
+  const [que, setQue] = useState<QueCompre>('insumo')
+
+  return (
+    <section className="tarjeta">
+      <h2>Compré</h2>
+
+      <div className="fila" style={{ marginBottom: '1rem' }}>
+        <button type="button" className={que === 'insumo' ? 'principal' : 'fantasma'} onClick={() => setQue('insumo')}>
+          Alimento o insumo
+        </button>
+        <button
+          type="button"
+          className={que === 'animales' ? 'principal' : 'fantasma'}
+          onClick={() => setQue('animales')}
+        >
+          Animales
+        </button>
+        <button type="button" className={que === 'gasto' ? 'principal' : 'fantasma'} onClick={() => setQue('gasto')}>
+          Otro gasto
+        </button>
+      </div>
+
+      {que === 'insumo' && <CompraInsumo alGuardar={alGuardar} />}
+      {que === 'animales' && <CompraAnimales alGuardar={alGuardar} />}
+      {que === 'gasto' && <Gasto alGuardar={alGuardar} />}
+    </section>
+  )
+}
+
+function CompraInsumo({ alGuardar }: { alGuardar: () => void }) {
+  const insumos = useDatos(() => api.listar('insumo'))
+  const cat = useCatalogos()
   const { mensaje, enviando, enviar } = useEnvio(alGuardar)
 
-  const [esInsumo, setEsInsumo] = useState(true)
   const [refId, setRefId] = useState('')
   const [fecha, setFecha] = useState(hoy())
-  const [cantidad, setCantidad] = useState('')
+  const [bolsas, setBolsas] = useState('')
   const [importe, setImporte] = useState('')
   const [destino, setDestino] = useState<Destino>({ unidadId: '', tandaId: '' })
 
   const centavos = aCentavos(importe)
-  const bolsas = cantidad.trim() === '' ? null : Number(cantidad)
-  const unitario = centavos !== null && bolsas !== null && bolsas > 0 ? Number(centavos) / bolsas : null
-
-  const puede = refId !== '' && centavos !== null && (!esInsumo || (bolsas !== null && bolsas > 0))
+  const n = bolsas.trim() === '' ? null : Number(bolsas)
+  const unitario = centavos !== null && n !== null && n > 0 ? Number(centavos) / n : null
 
   const enviarFormulario = (e: React.FormEvent) => {
     e.preventDefault()
     void enviar(
       {
         fecha,
-        tipo: esInsumo ? 'compra' : 'gasto',
+        tipo: 'compra',
         refId,
-        cantidad: esInsumo ? String(Math.trunc(bolsas ?? 0)) : '0',
+        cantidad: String(Math.trunc(n ?? 0)),
         importe: String(centavos),
-        ...(destino.tandaId !== '' ? { tandaId: destino.tandaId } : {}),
-        ...(destino.tandaId === '' && destino.unidadId !== '' ? { unidadId: destino.unidadId } : {}),
+        ...destinoAMovimiento(destino),
       },
-      esInsumo ? 'Compra registrada.' : 'Gasto registrado.',
+      'Compra registrada.',
+      () => {
+        setBolsas('')
+        setImporte('')
+      },
+    )
+  }
+
+  return (
+    <form onSubmit={enviarFormulario}>
+      <SelectorConAlta
+        etiqueta="¿Qué compraste?"
+        valor={refId}
+        alCambiar={setRefId}
+        opciones={(insumos.datos ?? []) as Registro[]}
+        fijos={{ presentacion: 'bolsa' }}
+        campos={[
+          { clave: 'nombre', etiqueta: 'Nombre del insumo', sugerencia: 'Alimento terminador' },
+          { clave: 'gramosPorBolsa', etiqueta: 'Kilos por bolsa', tipo: 'numero', inicial: '25' },
+        ]}
+        alCrear={async (datos) => {
+          const kilos = Number(datos['gramosPorBolsa'] ?? 0)
+          const creado = await api.crear('insumo', { ...datos, gramosPorBolsa: Math.round(kilos * 1000) })
+          insumos.recargar()
+          return creado as { id: string }
+        }}
+      />
+
+      <div className="fila">
+        <Campo etiqueta="Bolsas">
+          <input
+            inputMode="numeric"
+            value={bolsas}
+            onChange={(e) => setBolsas(e.target.value.replace(/[^\d]/g, ''))}
+            placeholder="0"
+          />
+        </Campo>
+        <Campo etiqueta="Total pagado">
+          <input inputMode="decimal" value={importe} onChange={(e) => setImporte(e.target.value)} placeholder="0,00" />
+        </Campo>
+      </div>
+
+      {unitario !== null && (
+        <p className="calculado">Sale a {pesosExactos(unitario)} por bolsa. El unitario lo calcula el sistema.</p>
+      )}
+
+      <Campo etiqueta="Fecha">
+        <input type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} />
+      </Campo>
+
+      <SelectorDestino
+        destino={destino}
+        alCambiar={setDestino}
+        unidades={cat.unidades}
+        tandas={cat.tandas}
+        alCrearLugar={cat.crearLugar}
+      />
+
+      {mensaje !== null && <Aviso clase={mensaje.clase}>{mensaje.texto}</Aviso>}
+
+      <button
+        type="submit"
+        className="principal"
+        disabled={refId === '' || centavos === null || n === null || n <= 0 || enviando}
+      >
+        {enviando ? 'Guardando…' : 'Guardar'}
+      </button>
+    </form>
+  )
+}
+
+/**
+ * Comprar animales abre siempre una tanda: una compra es una camada de la misma
+ * edad y tipo. Se puede elegir una tanda que ya exista —si es la misma camada
+ * llegando en dos veces— o crear una acá mismo, en un lugar que también puede
+ * ser nuevo.
+ */
+function CompraAnimales({ alGuardar }: { alGuardar: () => void }) {
+  const cat = useCatalogos()
+  const especies = useDatos(() => api.listar('especie'))
+  const razas = useDatos(() => api.listar('raza'))
+  const tipos = useDatos(() => api.listar('categoria'))
+  const { mensaje, enviando, enviar } = useEnvio(alGuardar)
+
+  const [fecha, setFecha] = useState(hoy())
+  const [cantidad, setCantidad] = useState('')
+  const [importe, setImporte] = useState('')
+  const [destino, setDestino] = useState<Destino>({ unidadId: '', tandaId: '' })
+
+  const centavos = aCentavos(importe)
+  const n = cantidad.trim() === '' ? null : Number(cantidad)
+  const unitario = centavos !== null && n !== null && n > 0 ? Number(centavos) / n : null
+
+  const enviarFormulario = (e: React.FormEvent) => {
+    e.preventDefault()
+    void enviar(
+      {
+        fecha,
+        tipo: 'ingreso_animales',
+        tandaId: destino.tandaId,
+        ...(destino.unidadId !== '' ? { unidadId: destino.unidadId } : {}),
+        cantidad: String(Math.trunc(n ?? 0)),
+        ...(centavos !== null ? { importe: String(centavos) } : {}),
+      },
+      'Animales cargados.',
       () => {
         setCantidad('')
         setImporte('')
@@ -119,111 +267,204 @@ function CompraOGasto({ alGuardar }: { alGuardar: () => void }) {
     )
   }
 
-  return (
-    <section className="tarjeta">
-      <h2>{esInsumo ? 'Compra de insumo' : 'Gasto'}</h2>
+  const razasDe = (especieId: string) =>
+    ((razas.datos ?? []) as Registro[]).filter((r) => r['especieId'] === especieId || especieId === '')
 
-      <div className="fila" style={{ marginBottom: '1rem' }}>
-        <button type="button" className={esInsumo ? 'principal' : 'fantasma'} onClick={() => { setEsInsumo(true); setRefId('') }}>
-          Insumo
-        </button>
-        <button type="button" className={!esInsumo ? 'principal' : 'fantasma'} onClick={() => { setEsInsumo(false); setRefId('') }}>
-          Otro gasto
-        </button>
+  return (
+    <form onSubmit={enviarFormulario}>
+      <div className="fila">
+        <Campo etiqueta="Cuántos">
+          <input
+            inputMode="numeric"
+            value={cantidad}
+            onChange={(e) => setCantidad(e.target.value.replace(/[^\d]/g, ''))}
+            placeholder="20"
+          />
+        </Campo>
+        <Campo etiqueta="Total pagado">
+          <input inputMode="decimal" value={importe} onChange={(e) => setImporte(e.target.value)} placeholder="0,00" />
+        </Campo>
       </div>
 
-      <form onSubmit={enviarFormulario}>
-        {esInsumo ? (
-          <SelectorConAlta
-            etiqueta="Insumo"
-            valor={refId}
-            alCambiar={setRefId}
-            opciones={(insumos.datos ?? []) as Registro[]}
-            fijos={{ presentacion: 'bolsa' }}
-            campos={[
-              { clave: 'nombre', etiqueta: 'Nombre del insumo', sugerencia: 'Alimento terminador' },
-              { clave: 'gramosPorBolsa', etiqueta: 'Kilos por bolsa', tipo: 'numero', inicial: '25' },
-            ]}
-            alCrear={async (datos) => {
-              // La persona piensa en kilos por bolsa; la base guarda gramos.
-              const kilos = Number(datos['gramosPorBolsa'] ?? 0)
-              const creado = await api.crear('insumo', { ...datos, gramosPorBolsa: Math.round(kilos * 1000) })
-              insumos.recargar()
-              return creado as { id: string }
-            }}
-          />
-        ) : (
-          <SelectorConAlta
-            etiqueta="Rubro"
-            valor={refId}
-            alCambiar={setRefId}
-            opciones={(rubros.datos ?? []) as Registro[]}
-            campos={[{ clave: 'nombre', etiqueta: 'Nombre del rubro', sugerencia: 'Combustible' }]}
-            alCrear={async (datos) => {
-              const creado = await api.crear('rubro_gasto', datos)
-              rubros.recargar()
-              return creado as { id: string }
-            }}
-          />
-        )}
+      {unitario !== null && <p className="calculado">Sale a {pesosExactos(unitario)} por animal.</p>}
 
-        <Campo etiqueta="Fecha">
-          <input type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} />
-        </Campo>
+      <Campo etiqueta="Fecha">
+        <input type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} />
+      </Campo>
 
-        {esInsumo && (
-          <Campo etiqueta="Bolsas">
-            <input
-              inputMode="numeric"
-              value={cantidad}
-              onChange={(e) => setCantidad(e.target.value.replace(/[^\d]/g, ''))}
-              placeholder="0"
-            />
-          </Campo>
-        )}
+      <SelectorDestino
+        etiqueta="¿A qué tanda entran?"
+        destino={destino}
+        alCambiar={setDestino}
+        unidades={cat.unidades}
+        tandas={cat.tandas}
+        exigirTanda
+        alCrearLugar={cat.crearLugar}
+      />
 
-        <Campo etiqueta="Total pagado">
-          <input
-            inputMode="decimal"
-            value={importe}
-            onChange={(e) => setImporte(e.target.value)}
-            placeholder="0,00"
-          />
-        </Campo>
+      <SelectorConAlta
+        etiqueta=""
+        soloAlta
+        textoAlta="Es una tanda nueva"
+        valor={destino.tandaId}
+        alCambiar={(id) => setDestino({ ...destino, tandaId: id })}
+        opciones={[]}
+        campos={[
+          { clave: 'nombre', etiqueta: 'Nombre de la tanda', sugerencia: 'Parrilleros agosto' },
+          {
+            clave: 'unidadId',
+            etiqueta: '¿En qué lugar?',
+            tipo: 'opciones',
+            inicial: destino.unidadId,
+            opciones: [
+              { valor: '', etiqueta: 'Sin lugar' },
+              ...cat.unidades.map((u) => ({ valor: u.id, etiqueta: (u['nombre'] as string) ?? u.id })),
+            ],
+          },
+          {
+            clave: 'categoriaId',
+            etiqueta: '¿Para qué es?',
+            tipo: 'opciones',
+            opciones: [
+              { valor: '', etiqueta: 'Sin definir' },
+              ...((tipos.datos ?? []) as Registro[]).map((t) => ({
+                valor: t.id,
+                etiqueta: (t['nombre'] as string) ?? t.id,
+              })),
+            ],
+          },
+          {
+            clave: 'especieId',
+            etiqueta: 'Especie',
+            tipo: 'opciones',
+            opciones: [
+              { valor: '', etiqueta: 'Sin definir' },
+              ...((especies.datos ?? []) as Registro[]).map((e) => ({
+                valor: e.id,
+                etiqueta: (e['nombre'] as string) ?? e.id,
+              })),
+            ],
+          },
+          {
+            clave: 'razaId',
+            etiqueta: 'Raza',
+            tipo: 'opciones',
+            opciones: [
+              { valor: '', etiqueta: 'Sin definir' },
+              ...razasDe('').map((r) => ({ valor: r.id, etiqueta: (r['nombre'] as string) ?? r.id })),
+            ],
+          },
+        ]}
+        alCrear={async (datos) => {
+          const creado = await api.crear('tanda', { ...datos, fechaInicio: fecha })
+          cat.recargarTandas()
+          return creado as { id: string }
+        }}
+      />
 
-        {unitario !== null && (
-          <p style={{ marginTop: '-0.4rem', color: '#666', fontSize: '0.85rem' }}>
-            Sale a {pesosExactos(unitario)} por bolsa. El unitario no se escribe: lo calcula el sistema.
-          </p>
-        )}
+      {mensaje !== null && <Aviso clase={mensaje.clase}>{mensaje.texto}</Aviso>}
 
-        <SelectorDestino
-          destino={destino}
-          alCambiar={setDestino}
-          unidades={(unidades.datos ?? []) as Registro[]}
-          tandas={(tandas.datos ?? []) as Array<Registro & { unidadId?: string | null }>}
-          alCrearLugar={async (nombre) => {
-            const creado = (await api.crear('unidad', { nombre })) as Registro
-            unidades.recargar()
-            return creado
-          }}
-        />
-
-        {mensaje !== null && <Aviso clase={mensaje.clase}>{mensaje.texto}</Aviso>}
-
-        <button type="submit" className="principal" disabled={!puede || enviando}>
-          {enviando ? 'Guardando…' : 'Guardar'}
-        </button>
-      </form>
-    </section>
+      <button type="submit" className="principal" disabled={destino.tandaId === '' || n === null || n <= 0 || enviando}>
+        {enviando ? 'Guardando…' : 'Guardar'}
+      </button>
+    </form>
   )
 }
 
-function Venta({ alGuardar }: { alGuardar: () => void }) {
+function Gasto({ alGuardar }: { alGuardar: () => void }) {
+  const rubros = useDatos(() => api.listar('rubro_gasto'))
+  const cat = useCatalogos()
+  const { mensaje, enviando, enviar } = useEnvio(alGuardar)
+
+  const [refId, setRefId] = useState('')
+  const [fecha, setFecha] = useState(hoy())
+  const [importe, setImporte] = useState('')
+  const [destino, setDestino] = useState<Destino>({ unidadId: '', tandaId: '' })
+  const [animalId, setAnimalId] = useState('')
+
+  const centavos = aCentavos(importe)
+
+  // Los animales con nombre de la tanda elegida: el remedio de un reproductor
+  // se le carga a él, y desde ahí sube a su tanda y a su lugar.
+  const animalesDeLaTanda = cat.animales.filter((a) => a.tandaId === destino.tandaId)
+
+  const enviarFormulario = (e: React.FormEvent) => {
+    e.preventDefault()
+    void enviar(
+      {
+        fecha,
+        tipo: 'gasto',
+        refId,
+        cantidad: '0',
+        importe: String(centavos),
+        ...(animalId !== '' ? { animalId } : destinoAMovimiento(destino)),
+      },
+      'Gasto registrado.',
+      () => setImporte(''),
+    )
+  }
+
+  return (
+    <form onSubmit={enviarFormulario}>
+      <SelectorConAlta
+        etiqueta="¿De qué?"
+        valor={refId}
+        alCambiar={setRefId}
+        opciones={(rubros.datos ?? []) as Registro[]}
+        campos={[{ clave: 'nombre', etiqueta: 'Nombre del rubro', sugerencia: 'Combustible' }]}
+        alCrear={async (datos) => {
+          const creado = await api.crear('rubro_gasto', datos)
+          rubros.recargar()
+          return creado as { id: string }
+        }}
+      />
+
+      <div className="fila">
+        <Campo etiqueta="Importe">
+          <input inputMode="decimal" value={importe} onChange={(e) => setImporte(e.target.value)} placeholder="0,00" />
+        </Campo>
+        <Campo etiqueta="Fecha">
+          <input type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} />
+        </Campo>
+      </div>
+
+      <SelectorDestino
+        destino={destino}
+        alCambiar={(d) => {
+          setDestino(d)
+          setAnimalId('')
+        }}
+        unidades={cat.unidades}
+        tandas={cat.tandas}
+        alCrearLugar={cat.crearLugar}
+      />
+
+      {animalesDeLaTanda.length > 0 && (
+        <Campo etiqueta="¿Es de un animal en particular? (opcional)">
+          <Selector
+            valor={animalId}
+            alCambiar={setAnimalId}
+            opciones={animalesDeLaTanda as unknown as Registro[]}
+            vacio="Toda la tanda"
+          />
+        </Campo>
+      )}
+
+      {mensaje !== null && <Aviso clase={mensaje.clase}>{mensaje.texto}</Aviso>}
+
+      <button type="submit" className="principal" disabled={refId === '' || centavos === null || enviando}>
+        {enviando ? 'Guardando…' : 'Guardar'}
+      </button>
+    </form>
+  )
+}
+
+// --- Vendí -------------------------------------------------------------------
+
+function Vendi({ alGuardar }: { alGuardar: () => void }) {
   const productos = useDatos(() => api.listar('producto'))
   const contrapartes = useDatos(() => api.listar('contraparte'))
-  const tandas = useDatos(() => api.listar('tanda'))
-  const unidades = useDatos(() => api.listar('unidad'))
+  const cat = useCatalogos()
   const { mensaje, enviando, enviar } = useEnvio(alGuardar)
 
   const [refId, setRefId] = useState('')
@@ -233,24 +474,31 @@ function Venta({ alGuardar }: { alGuardar: () => void }) {
   const [cobrado, setCobrado] = useState('')
   const [contraparteId, setContraparteId] = useState('')
   const [destino, setDestino] = useState<Destino>({ unidadId: '', tandaId: '' })
+  const [animalId, setAnimalId] = useState('')
 
   const centavos = aCentavos(importe)
   const cobradoCentavos = aCentavos(cobrado)
-  const puede = refId !== '' && centavos !== null && cantidad.trim() !== ''
+  const deuda = centavos !== null ? centavos - (cobradoCentavos ?? 0n) : null
+  const animalesDeLaTanda = cat.animales.filter((a) => a.tandaId === destino.tandaId)
 
   const enviarFormulario = async (e: React.FormEvent) => {
     e.preventDefault()
+
+    // Venta y cobro salen de la misma carga: el grupo los une para poder
+    // anular la operación entera si se cargó mal.
+    const grupoId = nuevoId()
 
     await enviar(
       {
         fecha,
         tipo: 'venta',
         refId,
-        cantidad: String(Math.trunc(Number(cantidad))),
+        grupoId,
+        cantidad: String(Math.trunc(Number(cantidad || '0'))),
         importe: String(centavos),
         ...(contraparteId !== '' ? { contraparteId } : {}),
-        ...(destino.tandaId !== '' ? { tandaId: destino.tandaId } : {}),
-        ...(destino.tandaId === '' && destino.unidadId !== '' ? { unidadId: destino.unidadId } : {}),
+        ...(animalId !== '' ? { animalId } : {}),
+        ...destinoAMovimiento(destino),
       },
       'Venta registrada.',
       () => {
@@ -260,23 +508,25 @@ function Venta({ alGuardar }: { alGuardar: () => void }) {
       },
     )
 
-    // Lo cobrado en el momento es un movimiento aparte: así la deuda queda
-    // siendo ventas − cobros y no un campo más que mantener.
     if (cobradoCentavos !== null && cobradoCentavos > 0n && contraparteId !== '') {
-      await guardarMovimiento({ fecha, tipo: 'cobro', importe: String(cobradoCentavos), contraparteId })
+      await guardarMovimiento({
+        fecha,
+        tipo: 'cobro',
+        grupoId,
+        importe: String(cobradoCentavos),
+        contraparteId,
+      })
       alGuardar()
     }
   }
 
-  const deuda = centavos !== null && cobradoCentavos !== null ? centavos - cobradoCentavos : null
-
   return (
     <section className="tarjeta">
-      <h2>Venta</h2>
+      <h2>Vendí</h2>
 
       <form onSubmit={enviarFormulario}>
         <SelectorConAlta
-          etiqueta="Producto"
+          etiqueta="¿Qué vendiste?"
           valor={refId}
           alCambiar={setRefId}
           opciones={(productos.datos ?? []) as Registro[]}
@@ -294,7 +544,12 @@ function Venta({ alGuardar }: { alGuardar: () => void }) {
                 { valor: 'docena', etiqueta: 'docena' },
               ],
             },
-            { clave: 'descuentaAnimales', etiqueta: 'Venderlo baja animales de la tanda', tipo: 'casilla', inicial: true },
+            {
+              clave: 'descuentaAnimales',
+              etiqueta: 'Venderlo baja animales de la tanda',
+              tipo: 'casilla',
+              inicial: true,
+            },
           ]}
           alCrear={async (datos) => {
             const creado = await api.crear('producto', datos)
@@ -302,10 +557,6 @@ function Venta({ alGuardar }: { alGuardar: () => void }) {
             return creado as { id: string }
           }}
         />
-
-        <Campo etiqueta="Fecha">
-          <input type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} />
-        </Campo>
 
         <div className="fila">
           <Campo etiqueta="Cantidad">
@@ -321,8 +572,12 @@ function Venta({ alGuardar }: { alGuardar: () => void }) {
           </Campo>
         </div>
 
+        <Campo etiqueta="Fecha">
+          <input type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} />
+        </Campo>
+
         <SelectorConAlta
-          etiqueta="Cliente"
+          etiqueta="¿A quién?"
           valor={contraparteId}
           alCambiar={setContraparteId}
           opciones={((contrapartes.datos ?? []) as Registro[]).filter((c) => c['esCliente'] === true)}
@@ -340,20 +595,41 @@ function Venta({ alGuardar }: { alGuardar: () => void }) {
         </Campo>
 
         {deuda !== null && deuda > 0n && (
-          <Aviso>Queda una deuda de {pesosExactos(Number(deuda))}. Aparece en el inicio hasta saldarse.</Aviso>
+          <Aviso>Queda una deuda de {pesosExactos(Number(deuda))}. Aparece en Números hasta saldarse.</Aviso>
         )}
 
         <SelectorDestino
-          etiqueta="¿De dónde salen? (opcional)"
+          etiqueta="¿De dónde salió?"
           destino={destino}
-          alCambiar={setDestino}
-          unidades={(unidades.datos ?? []) as Registro[]}
-          tandas={(tandas.datos ?? []) as Array<Registro & { unidadId?: string | null }>}
+          alCambiar={(d) => {
+            setDestino(d)
+            setAnimalId('')
+          }}
+          unidades={cat.unidades}
+          tandas={cat.tandas}
+          alCrearLugar={cat.crearLugar}
         />
+
+        {animalesDeLaTanda.length > 0 && (
+          <Campo etiqueta="¿Es un animal con nombre? (opcional)">
+            <Selector
+              valor={animalId}
+              alCambiar={setAnimalId}
+              opciones={animalesDeLaTanda as unknown as Registro[]}
+              vacio="No, es de la tanda"
+            />
+          </Campo>
+        )}
+
+        {animalId !== '' && (
+          <p className="calculado">
+            Al venderlo, su costo sale con él: la tanda se queda con el ingreso y sin ese costo.
+          </p>
+        )}
 
         {mensaje !== null && <Aviso clase={mensaje.clase}>{mensaje.texto}</Aviso>}
 
-        <button type="submit" className="principal" disabled={!puede || enviando}>
+        <button type="submit" className="principal" disabled={refId === '' || centavos === null || enviando}>
           {enviando ? 'Guardando…' : 'Guardar'}
         </button>
       </form>
@@ -361,165 +637,106 @@ function Venta({ alGuardar }: { alGuardar: () => void }) {
   )
 }
 
-/**
- * Movimientos de animales (§5.3): dos toques y un número.
- *
- * Los tipos que se ofrecen dependen de las capacidades de la categoría de la
- * tanda, no de su nombre. Una tanda de postura pide huevos; una de incubación,
- * huevos cargados. El código nunca mira cómo se llama la categoría.
- */
-function Animales({ alGuardar }: { alGuardar: () => void }) {
-  const tandas = useDatos(() => api.estado())
-  const categorias = useDatos(() => api.listar('categoria'))
-  const unidades = useDatos(() => api.listar('unidad'))
+// --- Pasó algo ---------------------------------------------------------------
+
+function PasoAlgo({ alGuardar }: { alGuardar: () => void }) {
+  const estado = useDatos(() => api.estado())
+  const cat = useCatalogos()
+  const tipos = useDatos(() => api.listar('categoria'))
   const { mensaje, enviando, enviar } = useEnvio(alGuardar)
 
-  const animalesConNombre = useDatos(() => api.animales())
-
   const [destino, setDestino] = useState<Destino>({ unidadId: '', tandaId: '' })
-  const tandaId = destino.tandaId
-  const [tipo, setTipo] = useState('ingreso_animales')
+  const [tipo, setTipo] = useState('muerte')
   const [fecha, setFecha] = useState(hoy())
   const [cantidad, setCantidad] = useState('')
   const [motivo, setMotivo] = useState('')
-  const [destinoId, setDestinoId] = useState('')
   const [madreId, setMadreId] = useState('')
-  const [importe, setImporte] = useState('')
+  const [aDonde, setADonde] = useState<Destino>({ unidadId: '', tandaId: '' })
 
-  const lista = tandas.datos?.tandas ?? []
-  const tanda = lista.find((t) => t.id === tandaId)
-  const cat = tanda?.categoria
-  const hembras = (animalesConNombre.datos ?? []).filter((a) => a.sexo !== 'macho')
+  const lista = estado.datos?.tandas.filter((t) => !t.cerrada) ?? []
+  const tanda = lista.find((t) => t.id === destino.tandaId)
+  const capacidades = tanda?.categoria
+  const hembras = cat.animales.filter((a) => a.sexo !== 'macho')
 
-  const tipos: Array<{ valor: string; etiqueta: string }> = [
-    { valor: 'ingreso_animales', etiqueta: 'Compra o ingreso de animales' },
-    { valor: 'muerte', etiqueta: 'Muerte' },
-    { valor: 'traslado', etiqueta: 'Traslado a otra tanda' },
-    { valor: 'recuento', etiqueta: 'Recuento (lo que conté)' },
+  const opciones: Array<{ valor: string; etiqueta: string }> = [
+    { valor: 'muerte', etiqueta: 'Se murió' },
+    { valor: 'traslado', etiqueta: 'Se movieron de tanda o lugar' },
+    { valor: 'recuento', etiqueta: 'Los conté' },
   ]
 
-  if (cat?.['registraNacimientos'] === true) tipos.splice(1, 0, { valor: 'nacimiento', etiqueta: 'Nacimiento' })
-  if (cat?.['registraHuevos'] === true) tipos.push({ valor: 'huevos', etiqueta: 'Huevos recolectados' })
-  if (cat?.['registraCargaIncubacion'] === true) {
-    tipos.push({ valor: 'carga_incubacion', etiqueta: 'Huevos cargados a incubar' })
-    tipos.push({ valor: 'fertiles', etiqueta: 'Huevos fértiles' })
+  if (capacidades?.['registraNacimientos'] === true) {
+    opciones.splice(0, 0, { valor: 'nacimiento', etiqueta: 'Nacieron' })
   }
-  if (cat?.['registraPeso'] === true) tipos.push({ valor: 'peso', etiqueta: 'Peso (gramos)' })
+  if (capacidades?.['registraHuevos'] === true) {
+    opciones.push({ valor: 'huevos', etiqueta: 'Junté huevos' })
+  }
+  if (capacidades?.['registraCargaIncubacion'] === true) {
+    opciones.push({ valor: 'carga_incubacion', etiqueta: 'Cargué huevos a incubar' })
+    opciones.push({ valor: 'fertiles', etiqueta: 'Conté los fértiles' })
+  }
+  if (capacidades?.['registraPeso'] === true) {
+    opciones.push({ valor: 'peso', etiqueta: 'Los pesé (gramos)' })
+  }
 
-  // Las capacidades de la categoría cambian qué tipos se ofrecen. Si el que
-  // estaba elegido ya no está en la lista, vale el primero: sin esto el select
-  // mostraba una opción y el formulario mandaba otra.
-  const tipoValido = tipos.some((t) => t.valor === tipo) ? tipo : (tipos[0]?.valor ?? 'ingreso_animales')
-
-  const puede = tandaId !== '' && cantidad.trim() !== '' && (tipoValido !== 'traslado' || destinoId !== '')
+  const valido = opciones.some((o) => o.valor === tipo) ? tipo : (opciones[0]?.valor ?? 'muerte')
 
   const enviarFormulario = (e: React.FormEvent) => {
     e.preventDefault()
     void enviar(
       {
         fecha,
-        tipo: tipoValido,
-        tandaId,
+        tipo: valido,
+        tandaId: destino.tandaId,
         ...(destino.unidadId !== '' ? { unidadId: destino.unidadId } : {}),
-        cantidad: String(Math.trunc(Number(cantidad))),
-        ...(tipoValido === 'ingreso_animales' && aCentavos(importe) !== null
-          ? { importe: String(aCentavos(importe)) }
-          : {}),
+        cantidad: String(Math.trunc(Number(cantidad || '0'))),
         ...(motivo !== '' ? { motivo } : {}),
-        ...(tipoValido === 'traslado' && destinoId !== '' ? { tandaDestinoId: destinoId } : {}),
-        ...(tipoValido === 'nacimiento' && madreId !== '' ? { animalId: madreId } : {}),
+        ...(valido === 'traslado' && aDonde.tandaId !== '' ? { tandaDestinoId: aDonde.tandaId } : {}),
+        ...(valido === 'nacimiento' && madreId !== '' ? { animalId: madreId } : {}),
       },
       'Registrado.',
       () => {
         setCantidad('')
         setMotivo('')
-        setImporte('')
       },
     )
   }
 
-  const unitarioAnimal =
-    aCentavos(importe) !== null && cantidad.trim() !== '' && Number(cantidad) > 0
-      ? Number(aCentavos(importe)) / Number(cantidad)
-      : null
-
   const diferencia =
-    tipoValido === 'recuento' && tanda !== undefined && cantidad.trim() !== ''
+    valido === 'recuento' && tanda !== undefined && cantidad.trim() !== ''
       ? BigInt(Math.trunc(Number(cantidad))) - BigInt(tanda.animales)
       : null
 
   return (
     <section className="tarjeta">
-      <h2>Movimiento de animales</h2>
+      <h2>Pasó algo</h2>
 
-      <form onSubmit={enviarFormulario}>
-        <SelectorDestino
-          etiqueta="¿Dónde?"
-          destino={destino}
-          alCambiar={setDestino}
-          unidades={(unidades.datos ?? []) as Registro[]}
-          tandas={lista as unknown as Array<Registro & { unidadId?: string | null }>}
-          exigirTanda
-          alCrearLugar={async (nombre) => {
-            const creado = (await api.crear('unidad', { nombre })) as Registro
-            unidades.recargar()
-            return creado
-          }}
-        />
+      {lista.length === 0 ? (
+        <Vacio>
+          No hay tandas abiertas. Empezá cargando animales en <strong>Compré</strong>.
+        </Vacio>
+      ) : (
+        <form onSubmit={enviarFormulario}>
+          <SelectorDestino
+            etiqueta="¿Dónde?"
+            destino={destino}
+            alCambiar={setDestino}
+            unidades={cat.unidades}
+            tandas={lista as unknown as Array<Registro & { unidadId?: string | null }>}
+            exigirTanda
+            alCrearLugar={cat.crearLugar}
+          />
 
-        <SelectorConAlta
-          etiqueta=""
-          soloAlta
-          textoAlta="Crear una tanda nueva"
-          valor={tandaId}
-          alCambiar={(id) => setDestino({ ...destino, tandaId: id })}
-          opciones={[]}
-          campos={[
-            { clave: 'nombre', etiqueta: 'Nombre de la tanda', sugerencia: 'Engorde agosto' },
-            {
-              clave: 'unidadId',
-              etiqueta: 'Lugar',
-              tipo: 'opciones',
-              inicial: destino.unidadId,
-              opciones: [
-                { valor: '', etiqueta: 'Sin lugar' },
-                ...((unidades.datos ?? []) as Registro[]).map((u) => ({
-                  valor: u.id,
-                  etiqueta: (u['nombre'] as string) ?? u.id,
-                })),
-              ],
-            },
-            {
-              clave: 'categoriaId',
-              etiqueta: '¿Para qué es?',
-              tipo: 'opciones',
-              opciones: [
-                { valor: '', etiqueta: 'Sin categoría' },
-                ...((categorias.datos ?? []) as Registro[]).map((c) => ({
-                  valor: c.id,
-                  etiqueta: (c['nombre'] as string) ?? c.id,
-                })),
-              ],
-            },
-          ]}
-          alCrear={async (datos) => {
-            const creado = await api.crear('tanda', { ...datos, fechaInicio: hoy() })
-            tandas.recargar()
-            return creado as { id: string }
-          }}
-        />
+          {tanda !== undefined && (
+            <p className="calculado">
+              Hoy tiene {tanda.animales} animales · {tanda.diasAbierta} días abierta.
+            </p>
+          )}
 
-        {tanda !== undefined && (
-          <p style={{ marginTop: '-0.5rem', color: '#666', fontSize: '0.85rem' }}>
-            Hoy tiene {tanda.animales} animales.
-          </p>
-        )}
-
-          <Campo etiqueta="Qué pasó">
-            <select value={tipoValido} onChange={(e) => setTipo(e.target.value)}>
-              {tipos.map((t) => (
-                <option key={t.valor} value={t.valor}>
-                  {t.etiqueta}
+          <Campo etiqueta="¿Qué pasó?">
+            <select value={valido} onChange={(e) => setTipo(e.target.value)}>
+              {opciones.map((o) => (
+                <option key={o.valor} value={o.valor}>
+                  {o.etiqueta}
                 </option>
               ))}
             </select>
@@ -529,7 +746,7 @@ function Animales({ alGuardar }: { alGuardar: () => void }) {
             <Campo etiqueta="Fecha">
               <input type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} />
             </Campo>
-            <Campo etiqueta="Cantidad">
+            <Campo etiqueta="Cuántos">
               <input
                 inputMode="numeric"
                 value={cantidad}
@@ -546,30 +763,7 @@ function Animales({ alGuardar }: { alGuardar: () => void }) {
             </Aviso>
           )}
 
-          {/* La madre puede estar en otra tanda: los gazapos se anotan donde van
-              a criarse, y la cría se le acredita igual a la coneja que parió. */}
-          {/* Comprar animales es una sola carga: las cabezas y la plata juntas.
-              Partirlo en un gasto por un lado y un ingreso por otro deja el
-              costo de la tanda incompleto y obliga a cargar dos veces. */}
-          {tipoValido === 'ingreso_animales' && (
-            <>
-              <Campo etiqueta="¿Cuánto pagaste? (opcional)">
-                <input
-                  inputMode="decimal"
-                  value={importe}
-                  onChange={(e) => setImporte(e.target.value)}
-                  placeholder="0,00"
-                />
-              </Campo>
-              {unitarioAnimal !== null && (
-                <p style={{ marginTop: '-0.6rem', marginBottom: '0.9rem', color: '#666', fontSize: '0.85rem' }}>
-                  Sale a {pesosExactos(unitarioAnimal)} por animal. Se suma al costo de la tanda.
-                </p>
-              )}
-            </>
-          )}
-
-          {tipoValido === 'nacimiento' && hembras.length > 0 && (
+          {valido === 'nacimiento' && hembras.length > 0 && (
             <>
               <Campo etiqueta="¿De qué madre? (opcional)">
                 <Selector
@@ -582,35 +776,109 @@ function Animales({ alGuardar }: { alGuardar: () => void }) {
                   vacio="Sin especificar"
                 />
               </Campo>
-              <p style={{ marginTop: '-0.6rem', marginBottom: '0.9rem', color: '#666', fontSize: '0.82rem' }}>
-                Anotá el nacimiento en la tanda donde van a criarse. Si los ponés directo ahí, no hace
-                falta trasladarlos después.
+              <p className="calculado">
+                Anotá el nacimiento en la tanda donde se van a criar. Así no hace falta trasladarlos
+                después, y el costo de los reproductores no se reparte entre las camadas.
               </p>
             </>
           )}
 
-          {tipoValido === 'traslado' && (
-            <Campo etiqueta="Tanda de destino">
-              <Selector
-                valor={destinoId}
-                alCambiar={setDestinoId}
-                opciones={(lista as unknown as Registro[]).filter((t) => t.id !== tandaId)}
+          {valido === 'traslado' && (
+            <>
+              <SelectorDestino
+                etiqueta="¿A dónde van?"
+                destino={aDonde}
+                alCambiar={setADonde}
+                unidades={cat.unidades}
+                tandas={cat.tandas.filter((t) => t.id !== destino.tandaId)}
+                exigirTanda
+                alCrearLugar={cat.crearLugar}
+              />
+
+              <SelectorConAlta
+                etiqueta=""
+                soloAlta
+                textoAlta="Van a una tanda nueva"
+                valor={aDonde.tandaId}
+                alCambiar={(id) => setADonde({ ...aDonde, tandaId: id })}
+                opciones={[]}
+                campos={[
+                  { clave: 'nombre', etiqueta: 'Nombre de la tanda', sugerencia: 'Reproductoras elegidas' },
+                  {
+                    clave: 'unidadId',
+                    etiqueta: '¿En qué lugar?',
+                    tipo: 'opciones',
+                    inicial: aDonde.unidadId,
+                    opciones: [
+                      { valor: '', etiqueta: 'Sin lugar' },
+                      ...cat.unidades.map((u) => ({ valor: u.id, etiqueta: (u['nombre'] as string) ?? u.id })),
+                    ],
+                  },
+                  {
+                    clave: 'categoriaId',
+                    etiqueta: '¿Para qué es?',
+                    tipo: 'opciones',
+                    opciones: [
+                      { valor: '', etiqueta: 'Sin definir' },
+                      ...((tipos.datos ?? []) as Registro[]).map((t) => ({
+                        valor: t.id,
+                        etiqueta: (t['nombre'] as string) ?? t.id,
+                      })),
+                    ],
+                  },
+                ]}
+                alCrear={async (datos) => {
+                  const creado = await api.crear('tanda', { ...datos, fechaInicio: fecha })
+                  cat.recargarTandas()
+                  return creado as { id: string }
+                }}
+              />
+
+              <p className="calculado">
+                El costo viaja con los animales, en proporción a cuántos se van.
+              </p>
+            </>
+          )}
+
+          {(valido === 'muerte' || valido === 'recuento' || valido === 'traslado') && (
+            <Campo etiqueta={valido === 'traslado' ? 'Comentario' : 'Motivo (opcional)'}>
+              <input
+                value={motivo}
+                onChange={(e) => setMotivo(e.target.value)}
+                placeholder={valido === 'traslado' ? 'Las mejores para reproducción' : ''}
               />
             </Campo>
           )}
 
-          {(tipoValido === 'muerte' || tipoValido === 'recuento') && (
-            <Campo etiqueta="Motivo (opcional)">
-              <input value={motivo} onChange={(e) => setMotivo(e.target.value)} />
-            </Campo>
-          )}
+          {mensaje !== null && <Aviso clase={mensaje.clase}>{mensaje.texto}</Aviso>}
 
-        {mensaje !== null && <Aviso clase={mensaje.clase}>{mensaje.texto}</Aviso>}
-
-        <button type="submit" className="principal" disabled={!puede || enviando}>
-          {enviando ? 'Guardando…' : 'Guardar'}
-        </button>
-      </form>
+          <button
+            type="submit"
+            className="principal"
+            disabled={
+              destino.tandaId === '' ||
+              cantidad.trim() === '' ||
+              (valido === 'traslado' && aDonde.tandaId === '') ||
+              enviando
+            }
+          >
+            {enviando ? 'Guardando…' : 'Guardar'}
+          </button>
+        </form>
+      )}
     </section>
   )
+}
+
+/**
+ * Traduce el destino elegido a los campos del movimiento.
+ *
+ * Cae en un solo nivel: la tanda si la hay, si no el lugar, si no nada —que
+ * significa toda la granja—. De eso depende que sumar los niveles no cuente
+ * dos veces lo mismo.
+ */
+function destinoAMovimiento(destino: Destino): Record<string, string> {
+  if (destino.tandaId !== '') return { tandaId: destino.tandaId }
+  if (destino.unidadId !== '') return { unidadId: destino.unidadId }
+  return {}
 }

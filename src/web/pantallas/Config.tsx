@@ -2,9 +2,9 @@
  * Configuración: acá el usuario crea la data que en otro sistema estaría
  * escrita en el código.
  *
- * Las capacidades de una categoría se copian de la plantilla al crearla, así
- * que editar la plantilla después no altera categorías ya creadas. Y nada en
- * esta pantalla depende de cómo se llame una categoría o una plantilla.
+ * Nada de esta pantalla depende de cómo se llame un tipo, un lugar o una raza.
+ * Lo único que el programa entiende son las seis capacidades, y hasta esas se
+ * marcan a mano al crear el tipo.
  */
 
 import { useState } from 'react'
@@ -25,16 +25,15 @@ const CAPACIDADES: Array<{ clave: string; etiqueta: string }> = [
 ]
 
 /**
- * Las secciones van en orden de dependencia: una tanda necesita una categoría,
- * y una categoría necesita una plantilla. Mostrarlas todas apiladas escondía
- * las de abajo, que son justamente las que hay que tocar primero.
+ * En orden de dependencia: una tanda necesita un lugar y un tipo. Mostrarlas
+ * todas apiladas escondía las de abajo, que son las que hay que tocar primero.
  */
 const SECCIONES = [
   { clave: 'unidades', etiqueta: 'Lugares' },
   { clave: 'tandas', etiqueta: 'Tandas' },
   { clave: 'animales', etiqueta: 'Animales' },
-  { clave: 'categorias', etiqueta: 'Categorías' },
-  { clave: 'plantillas', etiqueta: 'Plantillas' },
+  { clave: 'categorias', etiqueta: 'Tipos de tanda' },
+  { clave: 'razas', etiqueta: 'Razas' },
   { clave: 'insumos', etiqueta: 'Insumos' },
   { clave: 'productos', etiqueta: 'Productos' },
   { clave: 'contrapartes', etiqueta: 'Clientes' },
@@ -66,7 +65,7 @@ export function Config({ rol }: { rol: 'admin' | 'operador' }) {
       {seccion === 'tandas' && <Tandas alIrA={setSeccion} />}
       {seccion === 'animales' && <Animales />}
       {seccion === 'categorias' && <Categorias alIrA={setSeccion} />}
-      {seccion === 'plantillas' && <Plantillas />}
+      {seccion === 'razas' && <Razas />}
       {seccion === 'insumos' && <Insumos />}
       {seccion === 'productos' && <Productos />}
       {seccion === 'contrapartes' && <Contrapartes />}
@@ -290,33 +289,23 @@ function Contrapartes() {
   )
 }
 
-function Categorias({ alIrA }: { alIrA: (s: Seccion) => void }) {
+function Categorias({ alIrA: _alIrA }: { alIrA: (s: Seccion) => void }) {
   const { lista, mensaje, crear, anular } = useCrud('categoria')
-  const plantillas = useDatos(() => api.listar('plantilla'))
-  const especies = useDatos(() => api.listar('especie'))
 
   const [nombre, setNombre] = useState('')
-  const [plantillaId, setPlantillaId] = useState('')
-  const [especieId, setEspecieId] = useState('')
-
-  const disponibles = (plantillas.datos ?? []) as Registro[]
-  const elegida = disponibles.find((p) => p.id === plantillaId)
+  const [marcadas, setMarcadas] = useState<Record<string, boolean>>({})
 
   return (
     <section className="tarjeta">
-      <h2>Categorías</h2>
+      <h2>Tipos de tanda</h2>
 
-      {plantillas.datos !== null && disponibles.length === 0 && (
-        <Aviso>
-          No hay plantillas todavía.{' '}
-          <button type="button" className="chico fantasma" onClick={() => alIrA('plantillas')}>
-            Crear una plantilla
-          </button>
-        </Aviso>
-      )}
+      <p style={{ marginTop: 0, color: '#666', fontSize: '0.88rem' }}>
+        Un tipo define qué se le registra a las tandas de ese tipo. Marcá lo que corresponda: la app
+        nunca mira cómo se llama, sólo estas casillas.
+      </p>
 
       {lista.length === 0 ? (
-        <Vacio>Todavía no hay ninguna.</Vacio>
+        <Vacio>Todavía no hay ninguno.</Vacio>
       ) : (
         <table>
           <tbody>
@@ -345,68 +334,36 @@ function Categorias({ alIrA }: { alIrA: (s: Seccion) => void }) {
         style={{ marginTop: '0.75rem' }}
         onSubmit={(e) => {
           e.preventDefault()
-          void crear({ nombre, plantillaId, especieId }).then((ok) => ok && setNombre(''))
+          void crear({ nombre, ...marcadas }).then((ok) => {
+            if (ok) {
+              setNombre('')
+              setMarcadas({})
+            }
+          })
         }}
       >
-        <Campo etiqueta="Nombre">
-          <input value={nombre} onChange={(e) => setNombre(e.target.value)} />
+        <Campo etiqueta="Nombre del tipo">
+          <input value={nombre} onChange={(e) => setNombre(e.target.value)} placeholder="Engorde" />
         </Campo>
-        <div className="fila">
-          <Campo etiqueta="Plantilla">
-            <Selector valor={plantillaId} alCambiar={setPlantillaId} opciones={disponibles} />
-          </Campo>
-          <Campo etiqueta="Especie">
-            <Selector valor={especieId} alCambiar={setEspecieId} opciones={(especies.datos ?? []) as Registro[]} />
-          </Campo>
-        </div>
 
-        {/* Qué se copia de la plantilla, antes de crear y no después. */}
-        {elegida !== undefined && (
-          <p style={{ marginTop: '-0.4rem', marginBottom: '0.9rem', color: '#666', fontSize: '0.85rem' }}>
-            Las tandas de esta categoría van a registrar:{' '}
-            <strong>
-              {CAPACIDADES.filter((c) => elegida[c.clave] === true)
-                .map((c) => c.etiqueta.toLowerCase())
-                .join(', ') || 'nada en particular'}
-            </strong>
-            . Se copian ahora, así que cambiar la plantilla después no altera esta categoría.
-          </p>
-        )}
+        <span style={{ display: 'block', fontSize: '0.85rem', color: '#666', marginBottom: '0.4rem' }}>
+          ¿Qué se le registra?
+        </span>
 
-        <button type="submit" className="fantasma" disabled={nombre === '' || plantillaId === ''}>
-          Crear categoría
-        </button>
-      </form>
+        {CAPACIDADES.map((c) => (
+          <label key={c.clave} style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '0.4rem' }}>
+            <input
+              type="checkbox"
+              checked={marcadas[c.clave] === true}
+              onChange={(e) => setMarcadas({ ...marcadas, [c.clave]: e.target.checked })}
+              style={{ width: 'auto', minHeight: 0 }}
+            />
+            <span style={{ margin: 0 }}>{c.etiqueta}</span>
+          </label>
+        ))}
 
-      {mensaje !== null && <Aviso clase="error">{mensaje}</Aviso>}
-    </section>
-  )
-}
-
-function Unidades() {
-  const { lista, mensaje, crear, anular } = useCrud('unidad')
-  const [nombre, setNombre] = useState('')
-
-  return (
-    <section className="tarjeta">
-      <h2>Lugares</h2>
-      <p style={{ marginTop: 0, color: '#666', fontSize: '0.88rem' }}>
-        Dónde están los animales: el gallinero, la conejera, la incubadora. Adentro de cada uno puede
-        haber varias tandas con propósitos distintos.
-      </p>
-      <Lista items={lista} alBorrar={(id) => void anular(id)} />
-
-      <form
-        className="fila"
-        style={{ marginTop: '0.75rem' }}
-        onSubmit={(e) => {
-          e.preventDefault()
-          void crear({ nombre }).then((ok) => ok && setNombre(''))
-        }}
-      >
-        <input value={nombre} onChange={(e) => setNombre(e.target.value)} placeholder="Gallinero 1" />
-        <button type="submit" className="fantasma" style={{ flex: '0 0 auto', width: 'auto' }} disabled={nombre === ''}>
-          Agregar
+        <button type="submit" className="fantasma" style={{ marginTop: '0.5rem' }} disabled={nombre === ''}>
+          Crear tipo
         </button>
       </form>
 
@@ -419,10 +376,14 @@ function Tandas({ alIrA }: { alIrA: (s: Seccion) => void }) {
   const { lista, mensaje, crear } = useCrud('tanda')
   const categorias = useDatos(() => api.listar('categoria'))
   const unidades = useDatos(() => api.listar('unidad'))
+  const especies = useDatos(() => api.listar('especie'))
+  const razas = useDatos(() => api.listar('raza'))
 
   const [nombre, setNombre] = useState('')
   const [categoriaId, setCategoriaId] = useState('')
   const [unidadId, setUnidadId] = useState('')
+  const [especieId, setEspecieId] = useState('')
+  const [razaId, setRazaId] = useState('')
   const [fechaInicio, setFechaInicio] = useState(hoy())
 
   const disponibles = (categorias.datos ?? []) as Registro[]
@@ -445,7 +406,9 @@ function Tandas({ alIrA }: { alIrA: (s: Seccion) => void }) {
         style={{ marginTop: '0.75rem' }}
         onSubmit={(e) => {
           e.preventDefault()
-          void crear({ nombre, categoriaId, unidadId, fechaInicio }).then((ok) => ok && setNombre(''))
+          void crear({ nombre, categoriaId, unidadId, especieId, razaId, fechaInicio }).then(
+            (ok) => ok && setNombre(''),
+          )
         }}
       >
         <Campo etiqueta="Nombre">
@@ -454,6 +417,14 @@ function Tandas({ alIrA }: { alIrA: (s: Seccion) => void }) {
         <Campo etiqueta="¿En qué lugar?">
           <Selector valor={unidadId} alCambiar={setUnidadId} opciones={(unidades.datos ?? []) as Registro[]} />
         </Campo>
+        <div className="fila">
+          <Campo etiqueta="Especie">
+            <Selector valor={especieId} alCambiar={setEspecieId} opciones={(especies.datos ?? []) as Registro[]} />
+          </Campo>
+          <Campo etiqueta="Raza">
+            <Selector valor={razaId} alCambiar={setRazaId} opciones={(razas.datos ?? []) as Registro[]} />
+          </Campo>
+        </div>
         <div className="fila">
           <Campo etiqueta="Categoría">
             <Selector valor={categoriaId} alCambiar={setCategoriaId} opciones={disponibles} />
@@ -472,67 +443,136 @@ function Tandas({ alIrA }: { alIrA: (s: Seccion) => void }) {
   )
 }
 
-function Plantillas() {
-  const { lista, mensaje, crear, anular } = useCrud('plantilla')
+/**
+ * Lugares, que se anidan: Aves contiene los gallineros, y cada gallinero sus
+ * tandas. La profundidad no está fija porque conejos e incubadora no tienen
+ * nivel del medio.
+ */
+function Unidades() {
+  const { lista, mensaje, crear, anular, recargar } = useCrud('unidad')
   const [nombre, setNombre] = useState('')
-  const [marcadas, setMarcadas] = useState<Record<string, boolean>>({})
+  const [padreId, setPadreId] = useState('')
+
+  const nombreDe = (id: unknown): string =>
+    typeof id === 'string' ? ((lista.find((u) => u.id === id)?.['nombre'] as string) ?? '') : ''
 
   return (
     <section className="tarjeta">
-      <h2>Plantillas de categoría</h2>
+      <h2>Lugares</h2>
+      <p style={{ marginTop: 0, color: '#666', fontSize: '0.88rem' }}>
+        Dónde están los animales. Un lugar puede estar adentro de otro: Aves contiene los gallineros,
+        y cada gallinero sus tandas.
+      </p>
 
-      <table>
-        <tbody>
-          {lista.map((p) => (
-            <tr key={p.id}>
-              <td>
-                {p['nombre'] as string}
-                <div style={{ fontSize: '0.78rem', color: '#666' }}>
-                  {CAPACIDADES.filter((c) => p[c.clave] === true)
-                    .map((c) => c.etiqueta.toLowerCase())
-                    .join(' · ') || 'sin capacidades'}
-                </div>
-              </td>
-              <td style={{ textAlign: 'right' }}>
-                <button type="button" className="chico fantasma" onClick={() => void anular(p.id)}>
-                  Borrar
-                </button>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      {lista.length === 0 ? (
+        <Vacio>Todavía no hay ninguno.</Vacio>
+      ) : (
+        <table>
+          <tbody>
+            {lista.map((u) => (
+              <tr key={u.id}>
+                <td>
+                  {u['nombre'] as string}
+                  {typeof u['unidadPadreId'] === 'string' && (
+                    <div style={{ fontSize: '0.78rem', color: '#666' }}>dentro de {nombreDe(u['unidadPadreId'])}</div>
+                  )}
+                </td>
+                <td style={{ textAlign: 'right' }}>
+                  <button type="button" className="chico fantasma" onClick={() => void anular(u.id)}>
+                    Borrar
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
 
       <form
         style={{ marginTop: '0.75rem' }}
         onSubmit={(e) => {
           e.preventDefault()
-          void crear({ nombre, ...marcadas }).then((ok) => {
+          void crear({ nombre, unidadPadreId: padreId }).then((ok) => {
             if (ok) {
               setNombre('')
-              setMarcadas({})
+              recargar()
             }
           })
         }}
       >
-        <Campo etiqueta="Nombre de la plantilla nueva">
-          <input value={nombre} onChange={(e) => setNombre(e.target.value)} />
+        <Campo etiqueta="Nombre">
+          <input value={nombre} onChange={(e) => setNombre(e.target.value)} placeholder="Gallinero 1" />
         </Campo>
+        <Campo etiqueta="¿Está dentro de otro lugar? (opcional)">
+          <Selector valor={padreId} alCambiar={setPadreId} opciones={lista} vacio="No, cuelga de la granja" />
+        </Campo>
+        <button type="submit" className="fantasma" disabled={nombre === ''}>
+          Agregar lugar
+        </button>
+      </form>
 
-        {CAPACIDADES.map((c) => (
-          <label key={c.clave} style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '0.4rem' }}>
-            <input
-              type="checkbox"
-              checked={marcadas[c.clave] === true}
-              onChange={(e) => setMarcadas({ ...marcadas, [c.clave]: e.target.checked })}
-              style={{ width: 'auto', minHeight: 0 }}
-            />
-            <span style={{ margin: 0 }}>{c.etiqueta}</span>
-          </label>
-        ))}
+      {mensaje !== null && <Aviso clase="error">{mensaje}</Aviso>}
+    </section>
+  )
+}
 
-        <button type="submit" className="fantasma" style={{ marginTop: '0.5rem' }} disabled={nombre === ''}>
-          Crear plantilla
+/** Razas: Cornish, Blanco, Negra INTA. Se crean una vez y se reutilizan. */
+function Razas() {
+  const { lista, mensaje, crear, anular } = useCrud('raza')
+  const especies = useDatos(() => api.listar('especie'))
+  const [nombre, setNombre] = useState('')
+  const [especieId, setEspecieId] = useState('')
+
+  const nombreEspecie = (id: unknown): string =>
+    typeof id === 'string'
+      ? ((((especies.datos ?? []) as Registro[]).find((e) => e.id === id)?.['nombre'] as string) ?? '')
+      : ''
+
+  return (
+    <section className="tarjeta">
+      <h2>Razas</h2>
+      <p style={{ marginTop: 0, color: '#666', fontSize: '0.88rem' }}>
+        La raza no es la especie ni el propósito: Cornish y Blanco son las dos gallinas, y las dos
+        pueden ir a engorde o a reproducción.
+      </p>
+
+      {lista.length === 0 ? (
+        <Vacio>Todavía no hay ninguna.</Vacio>
+      ) : (
+        <table>
+          <tbody>
+            {lista.map((r) => (
+              <tr key={r.id}>
+                <td>
+                  {r['nombre'] as string}
+                  <div style={{ fontSize: '0.78rem', color: '#666' }}>{nombreEspecie(r['especieId'])}</div>
+                </td>
+                <td style={{ textAlign: 'right' }}>
+                  <button type="button" className="chico fantasma" onClick={() => void anular(r.id)}>
+                    Borrar
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+
+      <form
+        style={{ marginTop: '0.75rem' }}
+        onSubmit={(e) => {
+          e.preventDefault()
+          void crear({ nombre, especieId }).then((ok) => ok && setNombre(''))
+        }}
+      >
+        <Campo etiqueta="Nombre">
+          <input value={nombre} onChange={(e) => setNombre(e.target.value)} placeholder="Cornish" />
+        </Campo>
+        <Campo etiqueta="¿De qué especie?">
+          <Selector valor={especieId} alCambiar={setEspecieId} opciones={(especies.datos ?? []) as Registro[]} />
+        </Campo>
+        <button type="submit" className="fantasma" disabled={nombre === ''}>
+          Agregar raza
         </button>
       </form>
 

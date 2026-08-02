@@ -78,6 +78,9 @@ export const api = {
 
   estado: () => pedir<EstadoApi>('/estado'),
 
+  reimputar: (id: string, destino: { tandaId?: string | null; unidadId?: string | null; animalId?: string | null }) =>
+    pedir<{ ok: true }>(`/movimientos/${id}/imputacion`, { method: 'PATCH', body: JSON.stringify(destino) }),
+
   animales: () => pedir<AnimalApi[]>('/animales'),
 
   alimento: () => pedir<FilaAlimento[]>('/reportes/alimento'),
@@ -117,11 +120,14 @@ export interface MovimientoApi {
 export interface UnidadApi extends Registro {
   nombre: string
   nota: string | null
+  unidadPadreId: string | null
   tandas: number
   animales: string
-  costoCentavos: string
-  costoDeTandas: string
+  animalesPorEspecie: Record<string, string>
   costoPropio: string
+  costoCentavos: string
+  ingresos: string
+  resultado: string
   movimientoIds: string[]
 }
 
@@ -136,6 +142,11 @@ export interface EstadoApi {
       huevosRecolectados: string
       diasAbierta: number
       unidadId: string | null
+      especieId: string | null
+      razaId: string | null
+      ingresos: string
+      resultado: string
+      cerrada: boolean
       categoria: Registro | null
       incubacion: { sobreCargados: number | null; sobreFertiles: number | null } | null
     }
@@ -143,6 +154,7 @@ export interface EstadoApi {
   deposito: Array<
     Registro & { unidades: string; centavos: string; costoUnitario: number | null; bajoMinimo: boolean }
   >
+  general: { egresos: string; ingresos: string; movimientoIds: string[] }
   avisos: Array<{ movimientoId: string; clase: string; detalle: string }>
 }
 
