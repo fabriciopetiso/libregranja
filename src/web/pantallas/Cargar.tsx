@@ -202,6 +202,11 @@ function CompraOGasto({ alGuardar }: { alGuardar: () => void }) {
           alCambiar={setDestino}
           unidades={(unidades.datos ?? []) as Registro[]}
           tandas={(tandas.datos ?? []) as Array<Registro & { unidadId?: string | null }>}
+          alCrearLugar={async (nombre) => {
+            const creado = (await api.crear('unidad', { nombre })) as Registro
+            unidades.recargar()
+            return creado
+          }}
         />
 
         {mensaje !== null && <Aviso clase={mensaje.clase}>{mensaje.texto}</Aviso>}
@@ -379,6 +384,7 @@ function Animales({ alGuardar }: { alGuardar: () => void }) {
   const [motivo, setMotivo] = useState('')
   const [destinoId, setDestinoId] = useState('')
   const [madreId, setMadreId] = useState('')
+  const [importe, setImporte] = useState('')
 
   const lista = tandas.datos?.tandas ?? []
   const tanda = lista.find((t) => t.id === tandaId)
@@ -386,7 +392,7 @@ function Animales({ alGuardar }: { alGuardar: () => void }) {
   const hembras = (animalesConNombre.datos ?? []).filter((a) => a.sexo !== 'macho')
 
   const tipos: Array<{ valor: string; etiqueta: string }> = [
-    { valor: 'ingreso_animales', etiqueta: 'Ingreso de animales' },
+    { valor: 'ingreso_animales', etiqueta: 'Compra o ingreso de animales' },
     { valor: 'muerte', etiqueta: 'Muerte' },
     { valor: 'traslado', etiqueta: 'Traslado a otra tanda' },
     { valor: 'recuento', etiqueta: 'Recuento (lo que conté)' },
@@ -416,6 +422,9 @@ function Animales({ alGuardar }: { alGuardar: () => void }) {
         tandaId,
         ...(destino.unidadId !== '' ? { unidadId: destino.unidadId } : {}),
         cantidad: String(Math.trunc(Number(cantidad))),
+        ...(tipoValido === 'ingreso_animales' && aCentavos(importe) !== null
+          ? { importe: String(aCentavos(importe)) }
+          : {}),
         ...(motivo !== '' ? { motivo } : {}),
         ...(tipoValido === 'traslado' && destinoId !== '' ? { tandaDestinoId: destinoId } : {}),
         ...(tipoValido === 'nacimiento' && madreId !== '' ? { animalId: madreId } : {}),
@@ -424,9 +433,15 @@ function Animales({ alGuardar }: { alGuardar: () => void }) {
       () => {
         setCantidad('')
         setMotivo('')
+        setImporte('')
       },
     )
   }
+
+  const unitarioAnimal =
+    aCentavos(importe) !== null && cantidad.trim() !== '' && Number(cantidad) > 0
+      ? Number(aCentavos(importe)) / Number(cantidad)
+      : null
 
   const diferencia =
     tipoValido === 'recuento' && tanda !== undefined && cantidad.trim() !== ''
@@ -445,6 +460,11 @@ function Animales({ alGuardar }: { alGuardar: () => void }) {
           unidades={(unidades.datos ?? []) as Registro[]}
           tandas={lista as unknown as Array<Registro & { unidadId?: string | null }>}
           exigirTanda
+          alCrearLugar={async (nombre) => {
+            const creado = (await api.crear('unidad', { nombre })) as Registro
+            unidades.recargar()
+            return creado
+          }}
         />
 
         <SelectorConAlta
@@ -528,6 +548,27 @@ function Animales({ alGuardar }: { alGuardar: () => void }) {
 
           {/* La madre puede estar en otra tanda: los gazapos se anotan donde van
               a criarse, y la cría se le acredita igual a la coneja que parió. */}
+          {/* Comprar animales es una sola carga: las cabezas y la plata juntas.
+              Partirlo en un gasto por un lado y un ingreso por otro deja el
+              costo de la tanda incompleto y obliga a cargar dos veces. */}
+          {tipoValido === 'ingreso_animales' && (
+            <>
+              <Campo etiqueta="¿Cuánto pagaste? (opcional)">
+                <input
+                  inputMode="decimal"
+                  value={importe}
+                  onChange={(e) => setImporte(e.target.value)}
+                  placeholder="0,00"
+                />
+              </Campo>
+              {unitarioAnimal !== null && (
+                <p style={{ marginTop: '-0.6rem', marginBottom: '0.9rem', color: '#666', fontSize: '0.85rem' }}>
+                  Sale a {pesosExactos(unitarioAnimal)} por animal. Se suma al costo de la tanda.
+                </p>
+              )}
+            </>
+          )}
+
           {tipoValido === 'nacimiento' && hembras.length > 0 && (
             <>
               <Campo etiqueta="¿De qué madre? (opcional)">

@@ -10,7 +10,7 @@
 
 import { randomUUID } from 'node:crypto'
 
-import type { Movimiento } from '../core/tipos.js'
+import type { Jerarquia, Movimiento } from '../core/tipos.js'
 import type { Base } from './conexion.js'
 
 /** Columnas que son verdadero/falso y no números. */
@@ -36,6 +36,7 @@ const EXACTAS = new Set(['cantidad', 'importe'])
 export const TABLAS = [
   'unidad',
   'especie',
+  'raza',
   'plantilla',
   'categoria',
   'insumo',
@@ -219,6 +220,7 @@ export function leerMovimientos(base: Base, granjaId: string): Movimiento[] {
       ...(typeof m['importe'] === 'bigint' ? { importe: m['importe'] } : {}),
       ...opcional('tandaId'),
       ...opcional('unidadId'),
+      ...opcional('grupoId'),
       ...opcional('refId'),
       ...opcional('contraparteId'),
       ...opcional('tandaDestinoId'),
@@ -237,6 +239,7 @@ export interface NuevoMovimiento {
   importe?: bigint | undefined
   tandaId?: string | undefined
   unidadId?: string | undefined
+  grupoId?: string | undefined
   refId?: string | undefined
   contraparteId?: string | undefined
   tandaDestinoId?: string | undefined
@@ -259,10 +262,10 @@ export function crearMovimiento(
   base
     .prepare(
       `INSERT INTO movimiento
-         (id, granja_id, fecha, tipo, cantidad, importe, tanda_id, unidad_id, ref_id,
+         (id, granja_id, fecha, tipo, cantidad, importe, tanda_id, unidad_id, grupo_id, ref_id,
           contraparte_id, tanda_destino_id, animal_id, motivo, foto_id,
           creado_por, creado_en, modificado_en, eliminado)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
        ON CONFLICT(id) DO NOTHING`,
     )
     .run(
@@ -274,6 +277,7 @@ export function crearMovimiento(
       aParametro(datos.importe),
       aParametro(datos.tandaId || null),
       aParametro(datos.unidadId || null),
+      aParametro(datos.grupoId || null),
       aParametro(datos.refId || null),
       aParametro(datos.contraparteId || null),
       aParametro(datos.tandaDestinoId || null),
@@ -294,6 +298,69 @@ export function anularMovimiento(base: Base, id: string, motivo?: string): void 
   base
     .prepare('UPDATE movimiento SET eliminado = 1, modificado_en = ?, motivo = COALESCE(?, motivo) WHERE id = ?')
     .run(ahora(), aParametro(motivo), id)
+}
+
+/**
+ * La forma de la granja, para que el motor pueda sumar hacia arriba.
+ *
+ * Es data del catálogo, no de los movimientos: que Ponedoras viva en Gall 3 no
+ * se puede deducir de lo que se cargó. Por eso se lee acá y se le pasa al motor.
+ */
+export function leerJerarquia(base: Base, granjaId: string): Jerarquia {
+  const lugarPadre = new Map<string, string>()
+  for (const u of listar(base, 'unidad', granjaId)) {
+    const padre = u['unidadPadreId']
+    if (typeof padre === 'string' && padre !== '') lugarPadre.set(u['id'] as string, padre)
+  }
+
+  const tandaEnLugar = new Map<string, string>()
+  for (const t of listar(base, 'tanda', granjaId)) {
+    const lugar = t['unidadId']
+    if (typeof lugar === 'string' && lugar !== '') tandaEnLugar.set(t['id'] as string, lugar)
+  }
+
+  const animalEnTanda = new Map<string, string>()
+  for (const a of listar(base, 'animal', granjaId)) {
+    const tanda = a['tandaId']
+    if (typeof tanda === 'string' && tanda !== '') animalEnTanda.set(a['id'] as string, tanda)
+  }
+
+  return { lugarPadre, tandaEnLugar, animalEnTanda }
+}
+
+/**
+ * Cambia a qué nivel se imputa un movimiento ya cargado.
+ *
+ * Es la única excepción a que los movimientos no se editen, y se sostiene
+ * porque no toca la plata: el importe, la fecha y la cantidad quedan intactos.
+ * Sólo cambia dónde aparece ese gasto.
+ */
+export function reimputar(
+  base: Base,
+  id: string,
+  destino: {
+    tandaId?: string | null | undefined
+    unidadId?: string | null | undefined
+    animalId?: string | null | undefined
+  },
+): void {
+  base
+    .prepare('UPDATE movimiento SET tanda_id = ?, unidad_id = ?, animal_id = ?, modificado_en = ? WHERE id = ?')
+    .run(
+      aParametro(destino.tandaId || null),
+      aParametro(destino.unidadId || null),
+      aParametro(destino.animalId || null),
+      ahora(),
+      id,
+    )
+}
+
+/** Anula de una vez todos los movimientos que salieron de la misma carga. */
+export function anularGrupo(base: Base, grupoId: string): number {
+  const r = base
+    .prepare('UPDATE movimiento SET eliminado = 1, modificado_en = ? WHERE grupo_id = ? AND eliminado = 0')
+    .run(ahora(), grupoId)
+  return Number(r.changes)
 }
 
 /** Referencias ordenadas por frecuencia de uso, para las listas de carga (§5.1). */

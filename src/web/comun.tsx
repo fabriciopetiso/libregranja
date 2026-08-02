@@ -140,6 +140,7 @@ export function SelectorDestino({
   tandas,
   etiqueta = '¿A qué corresponde?',
   exigirTanda = false,
+  alCrearLugar,
 }: {
   destino: Destino
   alCambiar: (d: Destino) => void
@@ -147,8 +148,25 @@ export function SelectorDestino({
   tandas: Array<{ id: string; nombre?: string; unidadId?: string | null }>
   etiqueta?: string
   exigirTanda?: boolean
+  /** Si viene, se puede crear un lugar sin salir de la pantalla. */
+  alCrearLugar?: (nombre: string) => Promise<{ id: string }>
 }) {
+  const [nuevoLugar, setNuevoLugar] = useState<string | null>(null)
+  const [creando, setCreando] = useState(false)
+
   const delLugar = destino.unidadId === '' ? tandas : tandas.filter((t) => t.unidadId === destino.unidadId)
+
+  const crearLugar = async () => {
+    if (alCrearLugar === undefined || nuevoLugar === null || nuevoLugar.trim() === '') return
+    setCreando(true)
+    try {
+      const creado = await alCrearLugar(nuevoLugar.trim())
+      alCambiar({ unidadId: creado.id, tandaId: '' })
+      setNuevoLugar(null)
+    } finally {
+      setCreando(false)
+    }
+  }
 
   return (
     <div style={{ marginBottom: '0.9rem' }}>
@@ -179,6 +197,45 @@ export function SelectorDestino({
           vacio={destino.unidadId === '' ? 'Sin tanda' : 'Todo el lugar'}
         />
       </div>
+
+      {/* El lugar puede no existir todavía: comprar animales para un galpón
+          recién levantado no debería obligar a irse a Configuración primero. */}
+      {alCrearLugar !== undefined &&
+        (nuevoLugar === null ? (
+          <button
+            type="button"
+            className="chico fantasma"
+            style={{ marginTop: '0.4rem' }}
+            onClick={() => setNuevoLugar('')}
+          >
+            + Lugar nuevo
+          </button>
+        ) : (
+          <div className="alta-rapida">
+            <span style={{ display: 'block', fontSize: '0.8rem', color: '#666', marginBottom: '0.25rem' }}>
+              Nombre del lugar
+            </span>
+            <input
+              value={nuevoLugar}
+              onChange={(e) => setNuevoLugar(e.target.value)}
+              placeholder="Gallinero 2"
+              autoFocus
+            />
+            <div className="fila" style={{ marginTop: '0.6rem' }}>
+              <button
+                type="button"
+                className="principal"
+                onClick={() => void crearLugar()}
+                disabled={nuevoLugar.trim() === '' || creando}
+              >
+                {creando ? 'Creando…' : 'Crear y usar'}
+              </button>
+              <button type="button" className="fantasma" onClick={() => setNuevoLugar(null)}>
+                Cancelar
+              </button>
+            </div>
+          </div>
+        ))}
 
       {!exigirTanda && (
         <p style={{ margin: '0.25rem 0 0', fontSize: '0.8rem', color: '#999' }}>

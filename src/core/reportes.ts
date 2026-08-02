@@ -8,7 +8,7 @@
  */
 
 import { porcentaje } from './dinero.js'
-import type { EstadoTanda, Fecha, Movimiento } from './tipos.js'
+import type { Balance, Estado, EstadoTanda, Fecha, Jerarquia, Movimiento } from './tipos.js'
 
 export interface Rango {
   readonly desde: Fecha
@@ -153,6 +153,96 @@ export function resultadoDelPeriodo(movimientos: readonly Movimiento[], rango?: 
   }
 
   return { ventas, gastos, diferencia: ventas - gastos }
+}
+
+/**
+ * Balance de cada nivel: animal, tanda y lugar.
+ *
+ * Un gasto se imputa en un solo nivel —el más preciso que se conozca— y desde
+ * ahí sube: los medicamentos de Rambo cuentan en Rambo, en su tanda, en el
+ * gallinero y en la granja. Como nunca cae en dos niveles a la vez, sumar los
+ * totales de los hijos no puede contar dos veces lo mismo.
+ *
+ * El recorrido es de abajo hacia arriba: primero los animales suman a su tanda,
+ * después las tandas a su lugar, y al final cada lugar sube por la cadena de
+ * padres.
+ */
+export function balancePorNivel(estado: Estado, jerarquia: Jerarquia): Map<string, Balance> {
+  const propio = new Map<string, { eg: bigint; in: bigint; ids: string[] }>()
+
+  const anotar = (nivel: string, eg: bigint, ingreso: bigint, ids: readonly string[]): void => {
+    const actual = propio.get(nivel) ?? { eg: 0n, in: 0n, ids: [] }
+    actual.eg += eg
+    actual.in += ingreso
+    actual.ids.push(...ids)
+    propio.set(nivel, actual)
+  }
+
+  for (const [id, costo] of estado.costosDeAnimales) anotar(id, costo.costoCentavos, 0n, costo.movimientoIds)
+  for (const [id, tanda] of estado.tandas) anotar(id, tanda.costoCentavos, 0n, [])
+  for (const [id, unidad] of estado.unidades) anotar(id, unidad.costoCentavos, 0n, unidad.movimientoIds)
+  for (const [id, ingreso] of estado.ingresosPorNivel) anotar(id, 0n, ingreso.centavos, ingreso.movimientoIds)
+
+  // El total arranca en lo propio y va recibiendo lo de abajo.
+  const total = new Map<string, { eg: bigint; in: bigint }>()
+  for (const [id, p] of propio) total.set(id, { eg: p.eg, in: p.in })
+
+  const sumarA = (nivel: string, eg: bigint, ingreso: bigint): void => {
+    const actual = total.get(nivel) ?? { eg: 0n, in: 0n }
+    actual.eg += eg
+    actual.in += ingreso
+    total.set(nivel, actual)
+  }
+
+  // Los animales suben a su tanda.
+  for (const [animalId, tandaId] of jerarquia.animalEnTanda) {
+    const p = propio.get(animalId)
+    if (p !== undefined) sumarA(tandaId, p.eg, p.in)
+  }
+
+  // Las tandas suben a su lugar, ya con lo de sus animales adentro.
+  for (const [tandaId, lugarId] of jerarquia.tandaEnLugar) {
+    const t = total.get(tandaId)
+    if (t !== undefined) sumarA(lugarId, t.eg, t.in)
+  }
+
+  /**
+   * Cada lugar sube por su cadena de padres.
+   *
+   * `vistos` corta si la jerarquía quedó circular —A dentro de B y B dentro de
+   * A—, cosa que no debería pasar pero que un dato mal cargado puede provocar.
+   * Colgar la app por eso sería peor que mostrar un total incompleto.
+   */
+  const lugares = new Set<string>([...jerarquia.lugarPadre.keys(), ...jerarquia.tandaEnLugar.values()])
+  for (const lugarId of lugares) {
+    const suyo = total.get(lugarId)
+    if (suyo === undefined) continue
+
+    const vistos = new Set<string>([lugarId])
+    let padre = jerarquia.lugarPadre.get(lugarId)
+
+    while (padre !== undefined && !vistos.has(padre)) {
+      vistos.add(padre)
+      sumarA(padre, suyo.eg, suyo.in)
+      padre = jerarquia.lugarPadre.get(padre)
+    }
+  }
+
+  const balances = new Map<string, Balance>()
+  for (const id of new Set([...propio.keys(), ...total.keys()])) {
+    const p = propio.get(id) ?? { eg: 0n, in: 0n, ids: [] }
+    const t = total.get(id) ?? { eg: 0n, in: 0n }
+    balances.set(id, {
+      propioEgresos: p.eg,
+      propioIngresos: p.in,
+      totalEgresos: t.eg,
+      totalIngresos: t.in,
+      resultado: t.in - t.eg,
+      movimientoIds: p.ids,
+    })
+  }
+
+  return balances
 }
 
 /**

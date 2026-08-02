@@ -19,6 +19,7 @@ import { z } from 'zod'
 
 import { calcular } from '../core/motor.js'
 import {
+  balancePorNivel,
   deudaPorContraparte,
   gastosPorRubro,
   rendimientoIncubacion,
@@ -303,6 +304,7 @@ export function crearApi(base: Base): Hono<Entorno> {
         { id: p['id'] as string, descuentaAnimales: p['descuentaAnimales'] === true },
       ]),
     ),
+    jerarquia: repos.leerJerarquia(base, granjaId),
   })
 
   const rangoDe = (desde?: string, hasta?: string): Rango | undefined =>
@@ -326,25 +328,69 @@ export function crearApi(base: Base): Hono<Entorno> {
      * Es la pregunta que una lista plana de veinte tandas no contesta: "¿cuánto
      * me cuesta el gallinero?".
      */
+    const jerarquia = repos.leerJerarquia(base, granjaId)
+    const balances = balancePorNivel(estado, jerarquia)
+
+    /**
+     * Cuántos animales hay dentro de un lugar, contando los de sus lugares hijos.
+     * Se desglosa por especie: sumar gallinas y conejos en un solo número no
+     * querría decir nada.
+     */
+    const nombreEspecie = new Map(
+      repos.listar(base, 'especie', granjaId).map((e) => [e['id'] as string, e['nombre'] as string]),
+    )
+
+    const animalesDe = (unidadId: string): { total: bigint; porEspecie: Record<string, string> } => {
+      const porEspecie = new Map<string, bigint>()
+      let total = 0n
+
+      const recorrer = (id: string, visitados: Set<string>): void => {
+        if (visitados.has(id)) return
+        visitados.add(id)
+
+        for (const t of tandas.filter((x) => x['unidadId'] === id)) {
+          const cantidad = estado.tandas.get(t['id'] as string)?.animales ?? 0n
+          if (cantidad === 0n) continue
+          total += cantidad
+          const id = t['especieId'] as string | null
+          // Por nombre, no por id: el desglose es para leerlo.
+          const especie = id === null ? 'Sin especie' : (nombreEspecie.get(id) ?? 'Sin especie')
+          porEspecie.set(especie, (porEspecie.get(especie) ?? 0n) + cantidad)
+        }
+
+        for (const hija of unidades.filter((x) => x['unidadPadreId'] === id)) {
+          recorrer(hija['id'] as string, visitados)
+        }
+      }
+
+      recorrer(unidadId, new Set())
+      return {
+        total,
+        porEspecie: Object.fromEntries([...porEspecie].map(([k, v]) => [k, v.toString()])),
+      }
+    }
+
     const resumenUnidades = unidades.map((u) => {
-      const suyas = tandas.filter((t) => t['unidadId'] === u['id'])
-      const deTandas = suyas.reduce((s, t) => s + (estado.tandas.get(t['id'] as string)?.costoCentavos ?? 0n), 0n)
-      // Lo cargado al lugar mismo, sin tanda: el techo, la luz, el alambrado.
-      const propio = estado.unidades.get(u['id'] as string)
+      const id = u['id'] as string
+      const b = balances.get(id)
+      const conteo = animalesDe(id)
 
       return {
         ...u,
-        tandas: suyas.length,
-        animales: suyas.reduce((s, t) => s + (estado.tandas.get(t['id'] as string)?.animales ?? 0n), 0n),
-        costoDeTandas: deTandas,
-        costoPropio: propio?.costoCentavos ?? 0n,
-        costoCentavos: deTandas + (propio?.costoCentavos ?? 0n),
-        movimientoIds: propio?.movimientoIds ?? [],
+        tandas: tandas.filter((t) => t['unidadId'] === id).length,
+        animales: conteo.total,
+        animalesPorEspecie: conteo.porEspecie,
+        costoPropio: b?.propioEgresos ?? 0n,
+        costoCentavos: b?.totalEgresos ?? 0n,
+        ingresos: b?.totalIngresos ?? 0n,
+        resultado: b?.resultado ?? 0n,
+        movimientoIds: b?.movimientoIds ?? [],
       }
     })
 
     return json({
       unidades: resumenUnidades,
+      general: estado.general,
       tandas: tandas.map((t) => {
         const calculado = estado.tandas.get(t['id'] as string)
         const inicio = new Date(String(t['fechaInicio']))
@@ -352,7 +398,15 @@ export function crearApi(base: Base): Hono<Entorno> {
           ...t,
           categoria: categorias.get(t['categoriaId'] as string) ?? null,
           animales: calculado?.animales ?? 0n,
-          costoCentavos: calculado?.costoCentavos ?? 0n,
+          costoCentavos: balances.get(t['id'] as string)?.totalEgresos ?? calculado?.costoCentavos ?? 0n,
+          ingresos: balances.get(t['id'] as string)?.totalIngresos ?? 0n,
+          resultado: balances.get(t['id'] as string)?.resultado ?? 0n,
+          /**
+           * Cerrada es una cuenta, no un dato: tuvo animales alguna vez y ahora
+           * tiene cero. Una tanda recién creada, con cero, no está cerrada:
+           * está esperando.
+           */
+          cerrada: calculado !== undefined && calculado.animales === 0n,
           huevosCargados: calculado?.huevosCargados ?? 0n,
           nacidos: calculado?.nacidos ?? 0n,
           huevosRecolectados: calculado?.huevosRecolectados ?? 0n,
@@ -497,6 +551,35 @@ export function crearApi(base: Base): Hono<Entorno> {
       ),
     ),
   )
+
+  /**
+   * Cambiar a qué nivel se imputa un movimiento ya cargado.
+   *
+   * Única excepción a que los movimientos no se editen: no toca la plata, sólo
+   * dónde aparece. Cargar rápido en la granja y afinar después no debería
+   * obligar a anular y volver a cargar.
+   */
+  api.patch('/movimientos/:id/imputacion', async (c) => {
+    const cuerpo = await c.req.json().catch(() => null)
+    const datos = z
+      .object({
+        tandaId: z.string().nullable().optional(),
+        unidadId: z.string().nullable().optional(),
+        animalId: z.string().nullable().optional(),
+      })
+      .safeParse(cuerpo)
+
+    if (!datos.success) return json({ error: 'destino inválido' }, 400)
+
+    repos.reimputar(base, c.req.param('id'), datos.data)
+    return json({ ok: true })
+  })
+
+  /** Anula de una vez todos los movimientos que salieron de la misma carga. */
+  api.delete('/grupos/:grupoId', (c) => {
+    const anulados = repos.anularGrupo(base, c.req.param('grupoId'))
+    return json({ ok: true, anulados })
+  })
 
   // --- export ---------------------------------------------------------------
 

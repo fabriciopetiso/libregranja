@@ -9,8 +9,8 @@ import { describe, expect, it } from 'vitest'
 
 import { costoUnitario, formatearPesos, repartirProporcional } from './dinero.js'
 import { calcular } from './motor.js'
-import { deudaPorContraparte, gastosPorRubro, rendimientoIncubacion } from './reportes.js'
-import type { Catalogo, Movimiento, TipoMovimiento } from './tipos.js'
+import { balancePorNivel, deudaPorContraparte, gastosPorRubro, rendimientoIncubacion } from './reportes.js'
+import type { Catalogo, Jerarquia, Movimiento, TipoMovimiento } from './tipos.js'
 
 // --- utilidades del test -----------------------------------------------------
 
@@ -423,6 +423,101 @@ describe('Tres niveles: granja, lugar y tanda', () => {
 
   it('cada gasto de lugar trae los movimientos que lo componen', () => {
     expect(estado.unidades.get('gallinero')?.movimientoIds).toHaveLength(1)
+  })
+})
+
+describe('Imputación en cascada y balance por nivel', () => {
+  // Aves contiene Gall 1, que contiene la tanda, que contiene a Rambo.
+  const jerarquia: Jerarquia = {
+    lugarPadre: new Map([['gall1', 'aves']]),
+    tandaEnLugar: new Map([['reproductoras', 'gall1']]),
+    animalEnTanda: new Map([['rambo', 'reproductoras']]),
+  }
+
+  const m = secuencia()
+  const movimientos = [
+    m({ tipo: 'gasto', animalId: 'rambo', refId: 'veterinaria', importe: pesos(40_000) }),
+    m({ tipo: 'gasto', tandaId: 'reproductoras', refId: 'alimento', importe: pesos(80_000) }),
+    m({ tipo: 'gasto', unidadId: 'gall1', refId: 'infraestructura', importe: pesos(150_000) }),
+    m({ tipo: 'gasto', refId: 'otros', importe: pesos(20_000) }),
+  ]
+
+  const balances = balancePorNivel(calcular(movimientos), jerarquia)
+
+  it('cada gasto queda en el nivel donde se cargó', () => {
+    expect(balances.get('rambo')?.propioEgresos).toBe(pesos(40_000))
+    expect(balances.get('reproductoras')?.propioEgresos).toBe(pesos(80_000))
+    expect(balances.get('gall1')?.propioEgresos).toBe(pesos(150_000))
+  })
+
+  it('el costo sube: la tanda incluye lo de Rambo', () => {
+    expect(balances.get('reproductoras')?.totalEgresos).toBe(pesos(120_000))
+  })
+
+  it('el gallinero incluye lo suyo más lo de su tanda', () => {
+    expect(balances.get('gall1')?.totalEgresos).toBe(pesos(270_000))
+  })
+
+  it('Aves no tiene gasto propio pero acumula el de todo lo que contiene', () => {
+    expect(balances.get('aves')?.propioEgresos).toBe(0n)
+    expect(balances.get('aves')?.totalEgresos).toBe(pesos(270_000))
+  })
+
+  it('el gasto general no se pega a ningún nivel', () => {
+    expect(calcular(movimientos).general.egresos).toBe(pesos(20_000))
+    expect(balances.has('otros')).toBe(false)
+  })
+
+  it('vender imputa el ingreso al nivel del que salió', () => {
+    const m2 = secuencia()
+    const conVenta = calcular(
+      [
+        m2({ tipo: 'gasto', tandaId: 'parrilleros', refId: 'alimento', importe: pesos(300_000) }),
+        m2({ tipo: 'venta', tandaId: 'parrilleros', refId: 'pollo', cantidad: 50n, importe: pesos(520_000) }),
+      ],
+      catalogoConDescuento,
+    )
+    const b = balancePorNivel(conVenta, {
+      lugarPadre: new Map(),
+      tandaEnLugar: new Map([['parrilleros', 'gall2']]),
+      animalEnTanda: new Map(),
+    })
+
+    expect(b.get('parrilleros')?.totalIngresos).toBe(pesos(520_000))
+    expect(b.get('parrilleros')?.resultado).toBe(pesos(220_000))
+    // El gallinero hereda el resultado de su tanda sin haber gastado nada propio.
+    expect(b.get('gall2')?.resultado).toBe(pesos(220_000))
+  })
+
+  it('vender un animal con nombre le saca su costo: se va con él', () => {
+    const m3 = secuencia()
+    const estado = calcular([
+      m3({ tipo: 'gasto', animalId: 'rambo', refId: 'veterinaria', importe: pesos(40_000) }),
+      m3({ tipo: 'venta', animalId: 'rambo', refId: 'faenado', cantidad: 1n, importe: pesos(60_000) }),
+    ])
+    const b = balancePorNivel(estado, jerarquia)
+
+    expect(estado.costosDeAnimales.get('rambo')?.costoCentavos).toBe(0n)
+    // La tanda se queda con el ingreso y sin el costo que se fue con el animal.
+    expect(b.get('reproductoras')?.totalIngresos).toBe(pesos(60_000))
+    expect(b.get('reproductoras')?.totalEgresos).toBe(0n)
+  })
+
+  it('una jerarquía circular no cuelga el cálculo', () => {
+    const circular: Jerarquia = {
+      // Dato mal cargado: A dentro de B y B dentro de A.
+      lugarPadre: new Map([
+        ['a', 'b'],
+        ['b', 'a'],
+      ]),
+      tandaEnLugar: new Map(),
+      animalEnTanda: new Map(),
+    }
+    const m4 = secuencia()
+    const estado = calcular([m4({ tipo: 'gasto', unidadId: 'a', refId: 'otros', importe: pesos(10_000) })])
+
+    expect(() => balancePorNivel(estado, circular)).not.toThrow()
+    expect(balancePorNivel(estado, circular).get('b')?.totalEgresos).toBe(pesos(10_000))
   })
 })
 

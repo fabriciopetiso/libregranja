@@ -19,9 +19,11 @@ import { repartirProporcional } from './dinero.js'
 import type {
   Aviso,
   Catalogo,
+  CostoAnimal,
   Estado,
   EstadoAnimal,
   EstadoDeposito,
+  EstadoIngreso,
   EstadoTanda,
   EstadoUnidad,
   Imputacion,
@@ -66,6 +68,14 @@ function animalNuevo(): EstadoAnimal {
   return { nacidos: 0n, partos: 0, ultimoParto: null }
 }
 
+function costoAnimalNuevo(): CostoAnimal {
+  return { costoCentavos: 0n, movimientoIds: [] }
+}
+
+function ingresoNuevo(): EstadoIngreso {
+  return { centavos: 0n, movimientoIds: [] }
+}
+
 function obtener<T>(mapa: Map<string, T>, clave: string, crear: () => T): T {
   let valor = mapa.get(clave)
   if (valor === undefined) {
@@ -80,6 +90,9 @@ export function calcular(movimientos: readonly Movimiento[], catalogo: Catalogo 
   const tandas = new Map<string, EstadoTanda>()
   const unidades = new Map<string, EstadoUnidad>()
   const animales = new Map<string, EstadoAnimal>()
+  const costosDeAnimales = new Map<string, CostoAnimal>()
+  const ingresosPorNivel = new Map<string, EstadoIngreso>()
+  const general = { egresos: 0n, ingresos: 0n, movimientoIds: [] as string[] }
   const deudaPorContraparte = new Map<string, bigint>()
   const imputaciones: Imputacion[] = []
   const avisos: Aviso[] = []
@@ -154,24 +167,59 @@ export function calcular(movimientos: readonly Movimiento[], catalogo: Catalogo 
       }
 
       /**
-       * Un gasto cae en el nivel más específico que traiga: la tanda si la tiene,
-       * si no el lugar, si no queda como gasto general de la granja. Nunca en dos
-       * a la vez, para que sumar todos los niveles no cuente dos veces lo mismo.
+       * Un gasto cae en el nivel más preciso que traiga —animal, tanda, lugar—
+       * y si no trae ninguno queda a nombre de la granja. Nunca en dos a la vez:
+       * de eso depende que sumar los niveles de arriba no cuente dos veces.
+       *
+       * Lo imputado a un animal se sigue aparte del costo de su tanda, porque
+       * viaja distinto: los medicamentos de Rambo van con Rambo, el alimento que
+       * comieron todos se reparte.
        */
       case 'gasto': {
-        if (mov.tandaId !== undefined) {
+        if (mov.animalId !== undefined) {
+          const costo = obtener(costosDeAnimales, mov.animalId, costoAnimalNuevo)
+          costo.costoCentavos += importe
+          costo.movimientoIds.push(mov.id)
+        } else if (mov.tandaId !== undefined) {
           imputar(mov, mov.tandaId, importe, 'gasto')
         } else if (mov.unidadId !== undefined) {
           const unidad = obtener(unidades, mov.unidadId, unidadNueva)
           unidad.costoCentavos += importe
           unidad.movimientoIds.push(mov.id)
+        } else {
+          general.egresos += importe
+          general.movimientoIds.push(mov.id)
         }
         break
       }
 
+      /**
+       * Una venta suma deuda, baja existencias si el producto lo pide, y además
+       * imputa su importe al nivel del que salió. Sin eso, un lugar sabría cuánto
+       * costó pero no cuánto dio, que es la pregunta que importa.
+       *
+       * Vender un animal con nombre además le saca su costo: se va con él.
+       */
       case 'venta': {
         if (mov.contraparteId !== undefined) {
           deudaPorContraparte.set(mov.contraparteId, (deudaPorContraparte.get(mov.contraparteId) ?? 0n) + importe)
+        }
+
+        const nivel = mov.animalId ?? mov.tandaId ?? mov.unidadId
+        if (nivel === undefined) {
+          general.ingresos += importe
+          general.movimientoIds.push(mov.id)
+        } else {
+          const ingreso = obtener(ingresosPorNivel, nivel, ingresoNuevo)
+          ingreso.centavos += importe
+          ingreso.movimientoIds.push(mov.id)
+        }
+
+        if (mov.animalId !== undefined) {
+          const costo = costosDeAnimales.get(mov.animalId)
+          if (costo !== undefined) {
+            costo.costoCentavos = 0n
+          }
         }
         const producto = mov.refId !== undefined ? catalogo.productos.get(mov.refId) : undefined
         if (producto?.descuentaAnimales === true && mov.tandaId !== undefined) {
@@ -338,5 +386,16 @@ export function calcular(movimientos: readonly Movimiento[], catalogo: Catalogo 
     }
   }
 
-  return { depositos, tandas, unidades, animales, deudaPorContraparte, imputaciones, avisos }
+  return {
+    depositos,
+    tandas,
+    unidades,
+    animales,
+    costosDeAnimales,
+    ingresosPorNivel,
+    general,
+    deudaPorContraparte,
+    imputaciones,
+    avisos,
+  }
 }

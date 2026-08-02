@@ -73,8 +73,25 @@ export interface Producto {
   readonly descuentaAnimales: boolean
 }
 
+/**
+ * La forma de la granja: quién está dentro de quién.
+ *
+ * El motor la necesita para sumar hacia arriba, y no puede deducirla de los
+ * movimientos: que la tanda "Ponedoras" viva en "Gall 3" es data del catálogo.
+ * Se la pasa como argumento para que el motor siga sin tocar la base.
+ */
+export interface Jerarquia {
+  /** unidadId → unidadPadreId. Sin entrada = cuelga de la granja. */
+  readonly lugarPadre: ReadonlyMap<string, string>
+  /** tandaId → unidadId. Sin entrada = la tanda no está en ningún lugar. */
+  readonly tandaEnLugar: ReadonlyMap<string, string>
+  /** animalId → tandaId. */
+  readonly animalEnTanda: ReadonlyMap<string, string>
+}
+
 export interface Catalogo {
   readonly productos: ReadonlyMap<string, Producto>
+  readonly jerarquia?: Jerarquia
 }
 
 /** Estado de un insumo en el depósito. El costo por bolsa es el cociente, no un campo. */
@@ -136,12 +153,45 @@ export interface EstadoAnimal {
 /**
  * Lo imputado directamente a un lugar, sin pasar por una tanda.
  *
- * El motor no sabe qué tandas hay en cada lugar —esa relación vive en el
- * catálogo, no en los movimientos—, así que acá sólo se acumula lo que se cargó
- * al lugar mismo. Sumarle sus tandas es trabajo de quien arma el reporte.
+ * Es sólo lo propio del lugar —el techo, la luz, el alambrado—. Lo de sus
+ * tandas se suma aparte, en el balance.
  */
 export interface EstadoUnidad {
   costoCentavos: bigint
+  movimientoIds: string[]
+}
+
+/**
+ * Lo imputado a un animal con nombre: los medicamentos de Rambo.
+ *
+ * Se sigue por separado del costo de su tanda porque viaja distinto. Cuando el
+ * animal se traslada, su costo va entero con él; cuando se vende o muere, sale
+ * con él. El alimento que comieron todos, en cambio, se reparte proporcional.
+ */
+export interface CostoAnimal {
+  costoCentavos: bigint
+  movimientoIds: string[]
+}
+
+/**
+ * Balance de un nivel: lo suyo propio y lo de todo lo que tiene adentro.
+ *
+ * `propio` es lo que se le imputó directamente. `total` incluye además lo de
+ * los niveles de abajo. Un gasto cae en un solo nivel, así que sumar los
+ * totales de los hijos nunca cuenta dos veces lo mismo.
+ */
+export interface Balance {
+  readonly propioEgresos: bigint
+  readonly propioIngresos: bigint
+  readonly totalEgresos: bigint
+  readonly totalIngresos: bigint
+  readonly resultado: bigint
+  readonly movimientoIds: readonly string[]
+}
+
+/** Ingresos imputados a un nivel: lo que se vendió desde ahí. */
+export interface EstadoIngreso {
+  centavos: bigint
   movimientoIds: string[]
 }
 
@@ -150,6 +200,11 @@ export interface Estado {
   readonly tandas: ReadonlyMap<string, EstadoTanda>
   readonly unidades: ReadonlyMap<string, EstadoUnidad>
   readonly animales: ReadonlyMap<string, EstadoAnimal>
+  readonly costosDeAnimales: ReadonlyMap<string, CostoAnimal>
+  /** Ventas por nivel: la clave es el id de la tanda, del lugar o del animal. */
+  readonly ingresosPorNivel: ReadonlyMap<string, EstadoIngreso>
+  /** Lo imputado a la granja entera, sin nivel más preciso. */
+  readonly general: { egresos: bigint; ingresos: bigint; movimientoIds: string[] }
   readonly deudaPorContraparte: ReadonlyMap<string, bigint>
   readonly imputaciones: readonly Imputacion[]
   readonly avisos: readonly Aviso[]
