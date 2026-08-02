@@ -57,6 +57,7 @@ export interface Movimiento {
   readonly cantidad: bigint
   readonly importe?: bigint
   readonly tandaId?: string
+  readonly unidadId?: string
   readonly refId?: string
   readonly contraparteId?: string
   readonly tandaDestinoId?: string
@@ -98,7 +99,12 @@ export interface Imputacion {
   readonly movimientoId: string
   readonly tandaId: string
   readonly centavos: bigint
-  readonly concepto: 'entrega_insumo' | 'gasto' | 'ingreso_animales' | 'traslado_entrante' | 'traslado_saliente'
+  readonly concepto:
+    | 'entrega_insumo'
+    | 'gasto'
+    | 'ingreso_animales'
+    | 'traslado_entrante'
+    | 'traslado_saliente'
   readonly refId?: string
 }
 
@@ -127,9 +133,22 @@ export interface EstadoAnimal {
   ultimoParto: Fecha | null
 }
 
+/**
+ * Lo imputado directamente a un lugar, sin pasar por una tanda.
+ *
+ * El motor no sabe qué tandas hay en cada lugar —esa relación vive en el
+ * catálogo, no en los movimientos—, así que acá sólo se acumula lo que se cargó
+ * al lugar mismo. Sumarle sus tandas es trabajo de quien arma el reporte.
+ */
+export interface EstadoUnidad {
+  costoCentavos: bigint
+  movimientoIds: string[]
+}
+
 export interface Estado {
   readonly depositos: ReadonlyMap<string, EstadoDeposito>
   readonly tandas: ReadonlyMap<string, EstadoTanda>
+  readonly unidades: ReadonlyMap<string, EstadoUnidad>
   readonly animales: ReadonlyMap<string, EstadoAnimal>
   readonly deudaPorContraparte: ReadonlyMap<string, bigint>
   readonly imputaciones: readonly Imputacion[]

@@ -23,6 +23,7 @@ interface Borrador {
   refId?: string
   contraparteId?: string
   tandaDestinoId?: string
+  unidadId?: string
   animalId?: string
   id?: string
 }
@@ -45,6 +46,7 @@ function secuencia(): (b: Borrador) => Movimiento {
       ...(b.refId !== undefined ? { refId: b.refId } : {}),
       ...(b.contraparteId !== undefined ? { contraparteId: b.contraparteId } : {}),
       ...(b.tandaDestinoId !== undefined ? { tandaDestinoId: b.tandaDestinoId } : {}),
+      ...(b.unidadId !== undefined ? { unidadId: b.unidadId } : {}),
       ...(b.animalId !== undefined ? { animalId: b.animalId } : {}),
     }
   }
@@ -377,6 +379,50 @@ describe('Conejera: reproductores con nombre y camadas', () => {
 
     expect(estado.tandas.get('gazapos')?.animales).toBe(5n)
     expect(estado.animales.size).toBe(0)
+  })
+})
+
+describe('Tres niveles: granja, lugar y tanda', () => {
+  const m = secuencia()
+  const movimientos = [
+    // De la tanda: el alimento que comieron esos animales.
+    m({ tipo: 'gasto', tandaId: 'parrilleros', unidadId: 'gallinero', refId: 'alimento', importe: pesos(80_000) }),
+    // Del lugar: arreglar el techo no es de ninguna tanda en particular.
+    m({ tipo: 'gasto', unidadId: 'gallinero', refId: 'infraestructura', importe: pesos(50_000) }),
+    // De la granja: el contador no es de ningún lugar.
+    m({ tipo: 'gasto', refId: 'otros', importe: pesos(20_000) }),
+  ]
+
+  const estado = calcular(movimientos)
+
+  it('el gasto de una tanda va a la tanda, aunque venga con lugar', () => {
+    expect(estado.tandas.get('parrilleros')?.costoCentavos).toBe(pesos(80_000))
+  })
+
+  it('el gasto de un lugar sin tanda queda en el lugar', () => {
+    expect(estado.unidades.get('gallinero')?.costoCentavos).toBe(pesos(50_000))
+  })
+
+  it('no se cuenta dos veces: un gasto cae en un solo nivel', () => {
+    // Si el gasto de la tanda también sumara al lugar, el total daría $130.000
+    // en el gallinero y sumar todos los niveles contaría de más.
+    expect(estado.unidades.get('gallinero')?.costoCentavos).not.toBe(pesos(130_000))
+  })
+
+  it('el gasto general no queda pegado a ningún lugar ni tanda', () => {
+    expect(estado.unidades.size).toBe(1)
+    expect(estado.tandas.size).toBe(1)
+  })
+
+  it('el costo de un lugar es lo suyo más lo de sus tandas', () => {
+    // Es la suma que arma el reporte: 50.000 propios + 80.000 de la tanda.
+    const propio = estado.unidades.get('gallinero')?.costoCentavos ?? 0n
+    const deTandas = estado.tandas.get('parrilleros')?.costoCentavos ?? 0n
+    expect(propio + deTandas).toBe(pesos(130_000))
+  })
+
+  it('cada gasto de lugar trae los movimientos que lo componen', () => {
+    expect(estado.unidades.get('gallinero')?.movimientoIds).toHaveLength(1)
   })
 })
 

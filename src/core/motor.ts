@@ -23,6 +23,7 @@ import type {
   EstadoAnimal,
   EstadoDeposito,
   EstadoTanda,
+  EstadoUnidad,
   Imputacion,
   Movimiento,
 } from './tipos.js'
@@ -57,6 +58,10 @@ function tandaNueva(): EstadoTanda {
   }
 }
 
+function unidadNueva(): EstadoUnidad {
+  return { costoCentavos: 0n, movimientoIds: [] }
+}
+
 function animalNuevo(): EstadoAnimal {
   return { nacidos: 0n, partos: 0, ultimoParto: null }
 }
@@ -73,6 +78,7 @@ function obtener<T>(mapa: Map<string, T>, clave: string, crear: () => T): T {
 export function calcular(movimientos: readonly Movimiento[], catalogo: Catalogo = CATALOGO_VACIO): Estado {
   const depositos = new Map<string, EstadoDeposito>()
   const tandas = new Map<string, EstadoTanda>()
+  const unidades = new Map<string, EstadoUnidad>()
   const animales = new Map<string, EstadoAnimal>()
   const deudaPorContraparte = new Map<string, bigint>()
   const imputaciones: Imputacion[] = []
@@ -147,8 +153,19 @@ export function calcular(movimientos: readonly Movimiento[], catalogo: Catalogo 
         break
       }
 
+      /**
+       * Un gasto cae en el nivel más específico que traiga: la tanda si la tiene,
+       * si no el lugar, si no queda como gasto general de la granja. Nunca en dos
+       * a la vez, para que sumar todos los niveles no cuente dos veces lo mismo.
+       */
       case 'gasto': {
-        if (mov.tandaId !== undefined) imputar(mov, mov.tandaId, importe, 'gasto')
+        if (mov.tandaId !== undefined) {
+          imputar(mov, mov.tandaId, importe, 'gasto')
+        } else if (mov.unidadId !== undefined) {
+          const unidad = obtener(unidades, mov.unidadId, unidadNueva)
+          unidad.costoCentavos += importe
+          unidad.movimientoIds.push(mov.id)
+        }
         break
       }
 
@@ -321,5 +338,5 @@ export function calcular(movimientos: readonly Movimiento[], catalogo: Catalogo 
     }
   }
 
-  return { depositos, tandas, animales, deudaPorContraparte, imputaciones, avisos }
+  return { depositos, tandas, unidades, animales, deudaPorContraparte, imputaciones, avisos }
 }

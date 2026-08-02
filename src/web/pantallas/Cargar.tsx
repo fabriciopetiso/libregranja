@@ -10,7 +10,8 @@ import { useState } from 'react'
 
 import { api, guardarMovimiento } from '../api.js'
 import type { Registro } from '../api.js'
-import { Aviso, Campo, Selector, SelectorConAlta, useDatos, Vacio } from '../comun.js'
+import { Aviso, Campo, Selector, SelectorConAlta, SelectorDestino, useDatos, Vacio } from '../comun.js'
+import type { Destino } from '../comun.js'
 import { aCentavos, hoy, pesosExactos } from '../dinero.js'
 
 type Solapa = 'compra' | 'venta' | 'animales'
@@ -82,6 +83,7 @@ function CompraOGasto({ alGuardar }: { alGuardar: () => void }) {
   const insumos = useDatos(() => api.listar('insumo'))
   const rubros = useDatos(() => api.listar('rubro_gasto'))
   const tandas = useDatos(() => api.listar('tanda'))
+  const unidades = useDatos(() => api.listar('unidad'))
   const { mensaje, enviando, enviar } = useEnvio(alGuardar)
 
   const [esInsumo, setEsInsumo] = useState(true)
@@ -89,7 +91,7 @@ function CompraOGasto({ alGuardar }: { alGuardar: () => void }) {
   const [fecha, setFecha] = useState(hoy())
   const [cantidad, setCantidad] = useState('')
   const [importe, setImporte] = useState('')
-  const [tandaId, setTandaId] = useState('')
+  const [destino, setDestino] = useState<Destino>({ unidadId: '', tandaId: '' })
 
   const centavos = aCentavos(importe)
   const bolsas = cantidad.trim() === '' ? null : Number(cantidad)
@@ -106,7 +108,8 @@ function CompraOGasto({ alGuardar }: { alGuardar: () => void }) {
         refId,
         cantidad: esInsumo ? String(Math.trunc(bolsas ?? 0)) : '0',
         importe: String(centavos),
-        ...(tandaId !== '' ? { tandaId } : {}),
+        ...(destino.tandaId !== '' ? { tandaId: destino.tandaId } : {}),
+        ...(destino.tandaId === '' && destino.unidadId !== '' ? { unidadId: destino.unidadId } : {}),
       },
       esInsumo ? 'Compra registrada.' : 'Gasto registrado.',
       () => {
@@ -194,9 +197,12 @@ function CompraOGasto({ alGuardar }: { alGuardar: () => void }) {
           </p>
         )}
 
-        <Campo etiqueta="¿Va a una tanda? (opcional)">
-          <Selector valor={tandaId} alCambiar={setTandaId} opciones={(tandas.datos ?? []) as Registro[]} vacio="General" />
-        </Campo>
+        <SelectorDestino
+          destino={destino}
+          alCambiar={setDestino}
+          unidades={(unidades.datos ?? []) as Registro[]}
+          tandas={(tandas.datos ?? []) as Array<Registro & { unidadId?: string | null }>}
+        />
 
         {mensaje !== null && <Aviso clase={mensaje.clase}>{mensaje.texto}</Aviso>}
 
@@ -212,6 +218,7 @@ function Venta({ alGuardar }: { alGuardar: () => void }) {
   const productos = useDatos(() => api.listar('producto'))
   const contrapartes = useDatos(() => api.listar('contraparte'))
   const tandas = useDatos(() => api.listar('tanda'))
+  const unidades = useDatos(() => api.listar('unidad'))
   const { mensaje, enviando, enviar } = useEnvio(alGuardar)
 
   const [refId, setRefId] = useState('')
@@ -220,7 +227,7 @@ function Venta({ alGuardar }: { alGuardar: () => void }) {
   const [importe, setImporte] = useState('')
   const [cobrado, setCobrado] = useState('')
   const [contraparteId, setContraparteId] = useState('')
-  const [tandaId, setTandaId] = useState('')
+  const [destino, setDestino] = useState<Destino>({ unidadId: '', tandaId: '' })
 
   const centavos = aCentavos(importe)
   const cobradoCentavos = aCentavos(cobrado)
@@ -237,7 +244,8 @@ function Venta({ alGuardar }: { alGuardar: () => void }) {
         cantidad: String(Math.trunc(Number(cantidad))),
         importe: String(centavos),
         ...(contraparteId !== '' ? { contraparteId } : {}),
-        ...(tandaId !== '' ? { tandaId } : {}),
+        ...(destino.tandaId !== '' ? { tandaId: destino.tandaId } : {}),
+        ...(destino.tandaId === '' && destino.unidadId !== '' ? { unidadId: destino.unidadId } : {}),
       },
       'Venta registrada.',
       () => {
@@ -330,9 +338,13 @@ function Venta({ alGuardar }: { alGuardar: () => void }) {
           <Aviso>Queda una deuda de {pesosExactos(Number(deuda))}. Aparece en el inicio hasta saldarse.</Aviso>
         )}
 
-        <Campo etiqueta="Tanda de la que salen (opcional)">
-          <Selector valor={tandaId} alCambiar={setTandaId} opciones={(tandas.datos ?? []) as Registro[]} vacio="Ninguna" />
-        </Campo>
+        <SelectorDestino
+          etiqueta="¿De dónde salen? (opcional)"
+          destino={destino}
+          alCambiar={setDestino}
+          unidades={(unidades.datos ?? []) as Registro[]}
+          tandas={(tandas.datos ?? []) as Array<Registro & { unidadId?: string | null }>}
+        />
 
         {mensaje !== null && <Aviso clase={mensaje.clase}>{mensaje.texto}</Aviso>}
 
@@ -354,12 +366,14 @@ function Venta({ alGuardar }: { alGuardar: () => void }) {
 function Animales({ alGuardar }: { alGuardar: () => void }) {
   const tandas = useDatos(() => api.estado())
   const categorias = useDatos(() => api.listar('categoria'))
+  const unidades = useDatos(() => api.listar('unidad'))
   const { mensaje, enviando, enviar } = useEnvio(alGuardar)
 
   const animalesConNombre = useDatos(() => api.animales())
 
-  const [tandaId, setTandaId] = useState('')
-  const [tipo, setTipo] = useState('nacimiento')
+  const [destino, setDestino] = useState<Destino>({ unidadId: '', tandaId: '' })
+  const tandaId = destino.tandaId
+  const [tipo, setTipo] = useState('ingreso_animales')
   const [fecha, setFecha] = useState(hoy())
   const [cantidad, setCantidad] = useState('')
   const [motivo, setMotivo] = useState('')
@@ -386,19 +400,25 @@ function Animales({ alGuardar }: { alGuardar: () => void }) {
   }
   if (cat?.['registraPeso'] === true) tipos.push({ valor: 'peso', etiqueta: 'Peso (gramos)' })
 
-  const puede = tandaId !== '' && cantidad.trim() !== '' && (tipo !== 'traslado' || destinoId !== '')
+  // Las capacidades de la categoría cambian qué tipos se ofrecen. Si el que
+  // estaba elegido ya no está en la lista, vale el primero: sin esto el select
+  // mostraba una opción y el formulario mandaba otra.
+  const tipoValido = tipos.some((t) => t.valor === tipo) ? tipo : (tipos[0]?.valor ?? 'ingreso_animales')
+
+  const puede = tandaId !== '' && cantidad.trim() !== '' && (tipoValido !== 'traslado' || destinoId !== '')
 
   const enviarFormulario = (e: React.FormEvent) => {
     e.preventDefault()
     void enviar(
       {
         fecha,
-        tipo,
+        tipo: tipoValido,
         tandaId,
+        ...(destino.unidadId !== '' ? { unidadId: destino.unidadId } : {}),
         cantidad: String(Math.trunc(Number(cantidad))),
         ...(motivo !== '' ? { motivo } : {}),
-        ...(tipo === 'traslado' && destinoId !== '' ? { tandaDestinoId: destinoId } : {}),
-        ...(tipo === 'nacimiento' && madreId !== '' ? { animalId: madreId } : {}),
+        ...(tipoValido === 'traslado' && destinoId !== '' ? { tandaDestinoId: destinoId } : {}),
+        ...(tipoValido === 'nacimiento' && madreId !== '' ? { animalId: madreId } : {}),
       },
       'Registrado.',
       () => {
@@ -409,7 +429,7 @@ function Animales({ alGuardar }: { alGuardar: () => void }) {
   }
 
   const diferencia =
-    tipo === 'recuento' && tanda !== undefined && cantidad.trim() !== ''
+    tipoValido === 'recuento' && tanda !== undefined && cantidad.trim() !== ''
       ? BigInt(Math.trunc(Number(cantidad))) - BigInt(tanda.animales)
       : null
 
@@ -418,16 +438,40 @@ function Animales({ alGuardar }: { alGuardar: () => void }) {
       <h2>Movimiento de animales</h2>
 
       <form onSubmit={enviarFormulario}>
+        <SelectorDestino
+          etiqueta="¿Dónde?"
+          destino={destino}
+          alCambiar={setDestino}
+          unidades={(unidades.datos ?? []) as Registro[]}
+          tandas={lista as unknown as Array<Registro & { unidadId?: string | null }>}
+          exigirTanda
+        />
+
         <SelectorConAlta
-          etiqueta="Tanda"
+          etiqueta=""
+          soloAlta
+          textoAlta="Crear una tanda nueva"
           valor={tandaId}
-          alCambiar={setTandaId}
-          opciones={lista as unknown as Registro[]}
+          alCambiar={(id) => setDestino({ ...destino, tandaId: id })}
+          opciones={[]}
           campos={[
             { clave: 'nombre', etiqueta: 'Nombre de la tanda', sugerencia: 'Engorde agosto' },
             {
+              clave: 'unidadId',
+              etiqueta: 'Lugar',
+              tipo: 'opciones',
+              inicial: destino.unidadId,
+              opciones: [
+                { valor: '', etiqueta: 'Sin lugar' },
+                ...((unidades.datos ?? []) as Registro[]).map((u) => ({
+                  valor: u.id,
+                  etiqueta: (u['nombre'] as string) ?? u.id,
+                })),
+              ],
+            },
+            {
               clave: 'categoriaId',
-              etiqueta: 'Categoría',
+              etiqueta: '¿Para qué es?',
               tipo: 'opciones',
               opciones: [
                 { valor: '', etiqueta: 'Sin categoría' },
@@ -452,7 +496,7 @@ function Animales({ alGuardar }: { alGuardar: () => void }) {
         )}
 
           <Campo etiqueta="Qué pasó">
-            <select value={tipo} onChange={(e) => setTipo(e.target.value)}>
+            <select value={tipoValido} onChange={(e) => setTipo(e.target.value)}>
               {tipos.map((t) => (
                 <option key={t.valor} value={t.valor}>
                   {t.etiqueta}
@@ -484,7 +528,7 @@ function Animales({ alGuardar }: { alGuardar: () => void }) {
 
           {/* La madre puede estar en otra tanda: los gazapos se anotan donde van
               a criarse, y la cría se le acredita igual a la coneja que parió. */}
-          {tipo === 'nacimiento' && hembras.length > 0 && (
+          {tipoValido === 'nacimiento' && hembras.length > 0 && (
             <>
               <Campo etiqueta="¿De qué madre? (opcional)">
                 <Selector
@@ -504,7 +548,7 @@ function Animales({ alGuardar }: { alGuardar: () => void }) {
             </>
           )}
 
-          {tipo === 'traslado' && (
+          {tipoValido === 'traslado' && (
             <Campo etiqueta="Tanda de destino">
               <Selector
                 valor={destinoId}
@@ -514,7 +558,7 @@ function Animales({ alGuardar }: { alGuardar: () => void }) {
             </Campo>
           )}
 
-          {(tipo === 'muerte' || tipo === 'recuento') && (
+          {(tipoValido === 'muerte' || tipoValido === 'recuento') && (
             <Campo etiqueta="Motivo (opcional)">
               <input value={motivo} onChange={(e) => setMotivo(e.target.value)} />
             </Campo>

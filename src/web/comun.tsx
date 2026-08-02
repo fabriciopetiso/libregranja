@@ -117,6 +117,82 @@ export function Selector({
   )
 }
 
+export interface Destino {
+  unidadId: string
+  tandaId: string
+}
+
+/**
+ * A qué corresponde una carga: a toda la granja, a un lugar, o a una tanda.
+ *
+ * Dos listas encadenadas en vez de una sola gigante: primero el lugar, después
+ * qué tanda de ese lugar. Con veinte tandas repartidas en cuatro galpones, un
+ * único desplegable con todo junto es imposible de usar con una mano.
+ *
+ * Dejar la tanda en blanco es válido y significa algo distinto de no elegir
+ * nada: arreglar el techo del gallinero no es de ninguna tanda, pero tampoco es
+ * un gasto general de la granja.
+ */
+export function SelectorDestino({
+  destino,
+  alCambiar,
+  unidades,
+  tandas,
+  etiqueta = '¿A qué corresponde?',
+  exigirTanda = false,
+}: {
+  destino: Destino
+  alCambiar: (d: Destino) => void
+  unidades: Array<{ id: string; nombre?: string }>
+  tandas: Array<{ id: string; nombre?: string; unidadId?: string | null }>
+  etiqueta?: string
+  exigirTanda?: boolean
+}) {
+  const delLugar = destino.unidadId === '' ? tandas : tandas.filter((t) => t.unidadId === destino.unidadId)
+
+  return (
+    <div style={{ marginBottom: '0.9rem' }}>
+      <span style={{ display: 'block', fontSize: '0.85rem', color: '#666', marginBottom: '0.3rem' }}>
+        {etiqueta}
+      </span>
+
+      <div className="fila">
+        <Selector
+          valor={destino.unidadId}
+          alCambiar={(unidadId) => {
+            // Cambiar de lugar limpia la tanda: la que estaba elegida es de otro lado.
+            const sigueValiendo = tandas.some((t) => t.id === destino.tandaId && t.unidadId === unidadId)
+            alCambiar({ unidadId, tandaId: sigueValiendo ? destino.tandaId : '' })
+          }}
+          opciones={unidades}
+          vacio={exigirTanda ? 'Todos los lugares' : 'Toda la granja'}
+        />
+
+        <Selector
+          valor={destino.tandaId}
+          alCambiar={(tandaId) => {
+            // Elegir una tanda fija también su lugar, aunque no se haya elegido antes.
+            const tanda = tandas.find((t) => t.id === tandaId)
+            alCambiar({ tandaId, unidadId: tanda?.unidadId ?? destino.unidadId })
+          }}
+          opciones={delLugar}
+          vacio={destino.unidadId === '' ? 'Sin tanda' : 'Todo el lugar'}
+        />
+      </div>
+
+      {!exigirTanda && (
+        <p style={{ margin: '0.25rem 0 0', fontSize: '0.8rem', color: '#999' }}>
+          {destino.tandaId !== ''
+            ? 'Se carga a esa tanda.'
+            : destino.unidadId !== ''
+              ? 'Se carga al lugar entero, sin tanda.'
+              : 'Se carga como gasto general de la granja.'}
+        </p>
+      )}
+    </div>
+  )
+}
+
 export interface CampoAlta {
   clave: string
   etiqueta: string
@@ -144,6 +220,7 @@ export function SelectorConAlta({
   alCrear,
   vacio = 'Elegir…',
   textoAlta = 'Crear uno nuevo',
+  soloAlta = false,
 }: {
   etiqueta: string
   valor: string
@@ -154,6 +231,8 @@ export function SelectorConAlta({
   alCrear: (datos: Record<string, unknown>) => Promise<{ id: string } | null>
   vacio?: string
   textoAlta?: string
+  /** Sin lista propia: la elección se hace en otro lado y acá sólo se da de alta. */
+  soloAlta?: boolean
 }) {
   const [abierto, setAbierto] = useState(false)
   const [guardando, setGuardando] = useState(false)
@@ -186,21 +265,23 @@ export function SelectorConAlta({
       <span style={{ display: 'block', fontSize: '0.85rem', color: '#666', marginBottom: '0.3rem' }}>{etiqueta}</span>
 
       <div style={{ display: 'flex', gap: '0.5rem' }}>
-        <div style={{ flex: 1 }}>
-          <Selector valor={valor} alCambiar={alCambiar} opciones={opciones} vacio={vacio} />
-        </div>
+        {!soloAlta && (
+          <div style={{ flex: 1 }}>
+            <Selector valor={valor} alCambiar={alCambiar} opciones={opciones} vacio={vacio} />
+          </div>
+        )}
         <button
           type="button"
           className={abierto ? 'principal' : 'fantasma'}
-          style={{ flex: '0 0 auto', width: 'auto', paddingLeft: '1rem', paddingRight: '1rem' }}
+          style={soloAlta ? {} : { flex: '0 0 auto', width: 'auto', paddingLeft: '1rem', paddingRight: '1rem' }}
           onClick={() => setAbierto(!abierto)}
           aria-label={textoAlta}
         >
-          {abierto ? '×' : '+'}
+          {abierto ? 'Cancelar' : soloAlta ? textoAlta : '+'}
         </button>
       </div>
 
-      {opciones.length === 0 && !abierto && (
+      {!soloAlta && opciones.length === 0 && !abierto && (
         <p style={{ margin: '0.4rem 0 0', fontSize: '0.82rem', color: '#a05a00' }}>
           No hay ninguno cargado. Tocá <strong>+</strong> para crear el primero.
         </p>

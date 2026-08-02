@@ -18,6 +18,7 @@ import * as repos from '../db/repos.js'
 const COLUMNAS = [
   'Fecha',
   'Tipo',
+  'Lugar',
   'Tanda',
   'Referencia',
   'Cantidad',
@@ -53,7 +54,7 @@ export interface OpcionesExport {
 
 export function exportarCsv(base: Base, granjaId: string, opciones: OpcionesExport = {}): string {
   const nombres = new Map<string, string>()
-  for (const tabla of ['insumo', 'producto', 'rubro_gasto', 'contraparte', 'tanda'] as const) {
+  for (const tabla of ['insumo', 'producto', 'rubro_gasto', 'contraparte', 'tanda', 'unidad'] as const) {
     for (const fila of repos.listar(base, tabla, granjaId)) {
       nombres.set(fila['id'] as string, (fila['nombre'] as string | undefined) ?? (fila['id'] as string))
     }
@@ -96,6 +97,7 @@ export function exportarCsv(base: Base, granjaId: string, opciones: OpcionesExpo
       [
         m.fecha,
         m.tipo.replace(/_/g, ' '),
+        campo(nombre(m.unidadId)),
         campo(nombre(m.tandaId)),
         campo(nombre(m.refId)),
         m.cantidad.toString(),

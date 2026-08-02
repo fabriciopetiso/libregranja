@@ -78,6 +78,7 @@ const esquemaMovimiento = z.object({
   cantidad: aBigInt.optional(),
   importe: aBigInt.optional(),
   tandaId: z.string().optional(),
+  unidadId: z.string().optional(),
   refId: z.string().optional(),
   contraparteId: z.string().optional(),
   tandaDestinoId: z.string().optional(),
@@ -327,11 +328,18 @@ export function crearApi(base: Base): Hono<Entorno> {
      */
     const resumenUnidades = unidades.map((u) => {
       const suyas = tandas.filter((t) => t['unidadId'] === u['id'])
+      const deTandas = suyas.reduce((s, t) => s + (estado.tandas.get(t['id'] as string)?.costoCentavos ?? 0n), 0n)
+      // Lo cargado al lugar mismo, sin tanda: el techo, la luz, el alambrado.
+      const propio = estado.unidades.get(u['id'] as string)
+
       return {
         ...u,
         tandas: suyas.length,
         animales: suyas.reduce((s, t) => s + (estado.tandas.get(t['id'] as string)?.animales ?? 0n), 0n),
-        costoCentavos: suyas.reduce((s, t) => s + (estado.tandas.get(t['id'] as string)?.costoCentavos ?? 0n), 0n),
+        costoDeTandas: deTandas,
+        costoPropio: propio?.costoCentavos ?? 0n,
+        costoCentavos: deTandas + (propio?.costoCentavos ?? 0n),
+        movimientoIds: propio?.movimientoIds ?? [],
       }
     })
 

@@ -218,6 +218,7 @@ export function leerMovimientos(base: Base, granjaId: string): Movimiento[] {
       eliminado: false,
       ...(typeof m['importe'] === 'bigint' ? { importe: m['importe'] } : {}),
       ...opcional('tandaId'),
+      ...opcional('unidadId'),
       ...opcional('refId'),
       ...opcional('contraparteId'),
       ...opcional('tandaDestinoId'),
@@ -235,6 +236,7 @@ export interface NuevoMovimiento {
   cantidad?: bigint | undefined
   importe?: bigint | undefined
   tandaId?: string | undefined
+  unidadId?: string | undefined
   refId?: string | undefined
   contraparteId?: string | undefined
   tandaDestinoId?: string | undefined
@@ -257,10 +259,10 @@ export function crearMovimiento(
   base
     .prepare(
       `INSERT INTO movimiento
-         (id, granja_id, fecha, tipo, cantidad, importe, tanda_id, ref_id,
+         (id, granja_id, fecha, tipo, cantidad, importe, tanda_id, unidad_id, ref_id,
           contraparte_id, tanda_destino_id, animal_id, motivo, foto_id,
           creado_por, creado_en, modificado_en, eliminado)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
        ON CONFLICT(id) DO NOTHING`,
     )
     .run(
@@ -271,6 +273,7 @@ export function crearMovimiento(
       aParametro(datos.cantidad ?? 0n),
       aParametro(datos.importe),
       aParametro(datos.tandaId || null),
+      aParametro(datos.unidadId || null),
       aParametro(datos.refId || null),
       aParametro(datos.contraparteId || null),
       aParametro(datos.tandaDestinoId || null),

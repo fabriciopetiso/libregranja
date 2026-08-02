@@ -108,6 +108,7 @@ export interface MovimientoApi {
   cantidad: string
   importe?: string
   tandaId?: string
+  unidadId?: string
   refId?: string
   contraparteId?: string
   motivo?: string
@@ -119,6 +120,9 @@ export interface UnidadApi extends Registro {
   tandas: number
   animales: string
   costoCentavos: string
+  costoDeTandas: string
+  costoPropio: string
+  movimientoIds: string[]
 }
 
 export interface EstadoApi {
