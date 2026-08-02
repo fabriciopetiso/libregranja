@@ -69,6 +69,9 @@ export const api = {
   crear: <T = Registro>(tabla: string, datos: unknown) =>
     pedir<T>(`/catalogo/${tabla}`, { method: 'POST', body: JSON.stringify(datos) }),
 
+  actualizar: <T = Registro>(tabla: string, id: string, datos: unknown) =>
+    pedir<T>(`/catalogo/${tabla}/${id}`, { method: 'PATCH', body: JSON.stringify(datos) }),
+
   anular: (tabla: string, id: string) => pedir<{ ok: true }>(`/catalogo/${tabla}/${id}`, { method: 'DELETE' }),
 
   movimientos: () => pedir<MovimientoApi[]>('/movimientos'),

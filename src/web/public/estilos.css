@@ -394,6 +394,48 @@ ol.pasos li.hecho::before {
   color: var(--verde);
 }
 
+/* Lo que se puede tocar para corregir se ve distinto de lo que es sólo texto.
+   No hay pantalla de configuración: cada cosa se edita donde aparece. */
+button.editable {
+  width: auto;
+  min-height: 0;
+  padding: 0;
+  border: none;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-weight: inherit;
+  text-align: left;
+  cursor: pointer;
+  border-bottom: 1px dotted var(--gris-suave);
+}
+
+button.editable:hover,
+button.editable:focus-visible {
+  border-bottom-color: var(--verde);
+  color: var(--verde);
+}
+
+.nombre-nodo.editable { flex: 1 1 auto; min-width: 0; }
+
+.editor {
+  margin: .4rem 0 .8rem;
+  padding: .9rem;
+  background: var(--fondo);
+  border: 1px solid var(--gris-suave);
+  border-left: 3px solid var(--verde);
+  border-radius: var(--radio);
+}
+
+button.peligro { color: var(--rojo); border-color: var(--rojo); }
+
+p.calculado {
+  margin-top: -.4rem;
+  margin-bottom: .9rem;
+  color: var(--gris);
+  font-size: .85rem;
+}
+
 /* Alta de un ítem sin salir de la pantalla de carga. Se distingue del resto
    del formulario para que quede claro que es otra cosa la que se está creando. */
 .alta-rapida {

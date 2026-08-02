@@ -267,9 +267,6 @@ function CompraAnimales({ alGuardar }: { alGuardar: () => void }) {
     )
   }
 
-  const razasDe = (especieId: string) =>
-    ((razas.datos ?? []) as Registro[]).filter((r) => r['especieId'] === especieId || especieId === '')
-
   return (
     <form onSubmit={enviarFormulario}>
       <div className="fila">
@@ -309,22 +306,14 @@ function CompraAnimales({ alGuardar }: { alGuardar: () => void }) {
         valor={destino.tandaId}
         alCambiar={(id) => setDestino({ ...destino, tandaId: id })}
         opciones={[]}
+        fijos={{ unidadId: destino.unidadId }}
         campos={[
           { clave: 'nombre', etiqueta: 'Nombre de la tanda', sugerencia: 'Parrilleros agosto' },
-          {
-            clave: 'unidadId',
-            etiqueta: '¿En qué lugar?',
-            tipo: 'opciones',
-            inicial: destino.unidadId,
-            opciones: [
-              { valor: '', etiqueta: 'Sin lugar' },
-              ...cat.unidades.map((u) => ({ valor: u.id, etiqueta: (u['nombre'] as string) ?? u.id })),
-            ],
-          },
           {
             clave: 'categoriaId',
             etiqueta: '¿Para qué es?',
             tipo: 'opciones',
+            sugerencia: 'Engorde',
             opciones: [
               { valor: '', etiqueta: 'Sin definir' },
               ...((tipos.datos ?? []) as Registro[]).map((t) => ({
@@ -332,11 +321,17 @@ function CompraAnimales({ alGuardar }: { alGuardar: () => void }) {
                 etiqueta: (t['nombre'] as string) ?? t.id,
               })),
             ],
+            alCrearOpcion: async (nombre) => {
+              const creado = (await api.crear('categoria', { nombre })) as Registro
+              tipos.recargar()
+              return creado
+            },
           },
           {
             clave: 'especieId',
             etiqueta: 'Especie',
             tipo: 'opciones',
+            sugerencia: 'Gallina',
             opciones: [
               { valor: '', etiqueta: 'Sin definir' },
               ...((especies.datos ?? []) as Registro[]).map((e) => ({
@@ -344,15 +339,29 @@ function CompraAnimales({ alGuardar }: { alGuardar: () => void }) {
                 etiqueta: (e['nombre'] as string) ?? e.id,
               })),
             ],
+            alCrearOpcion: async (nombre) => {
+              const creado = (await api.crear('especie', { nombre })) as Registro
+              especies.recargar()
+              return creado
+            },
           },
           {
             clave: 'razaId',
             etiqueta: 'Raza',
             tipo: 'opciones',
+            sugerencia: 'Cornish',
             opciones: [
               { valor: '', etiqueta: 'Sin definir' },
-              ...razasDe('').map((r) => ({ valor: r.id, etiqueta: (r['nombre'] as string) ?? r.id })),
+              ...((razas.datos ?? []) as Registro[]).map((r) => ({
+                valor: r.id,
+                etiqueta: (r['nombre'] as string) ?? r.id,
+              })),
             ],
+            alCrearOpcion: async (nombre) => {
+              const creado = (await api.crear('raza', { nombre })) as Registro
+              razas.recargar()
+              return creado
+            },
           },
         ]}
         alCrear={async (datos) => {
@@ -802,18 +811,9 @@ function PasoAlgo({ alGuardar }: { alGuardar: () => void }) {
                 valor={aDonde.tandaId}
                 alCambiar={(id) => setADonde({ ...aDonde, tandaId: id })}
                 opciones={[]}
+                fijos={{ unidadId: aDonde.unidadId }}
                 campos={[
                   { clave: 'nombre', etiqueta: 'Nombre de la tanda', sugerencia: 'Reproductoras elegidas' },
-                  {
-                    clave: 'unidadId',
-                    etiqueta: '¿En qué lugar?',
-                    tipo: 'opciones',
-                    inicial: aDonde.unidadId,
-                    opciones: [
-                      { valor: '', etiqueta: 'Sin lugar' },
-                      ...cat.unidades.map((u) => ({ valor: u.id, etiqueta: (u['nombre'] as string) ?? u.id })),
-                    ],
-                  },
                   {
                     clave: 'categoriaId',
                     etiqueta: '¿Para qué es?',

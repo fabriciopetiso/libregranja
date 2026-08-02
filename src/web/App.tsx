@@ -6,7 +6,6 @@ import type { GranjaApi, Sesion } from './api.js'
 import { Ingreso } from './pantallas/Ingreso.js'
 import { Cargar } from './pantallas/Cargar.js'
 import { Comenzar } from './pantallas/Comenzar.js'
-import { Config } from './pantallas/Config.js'
 import { Estado } from './pantallas/Estado.js'
 import { Numeros } from './pantallas/Numeros.js'
 
@@ -82,7 +81,6 @@ export function App() {
         <Pestana a="/estado">Estado</Pestana>
         <Pestana a="/cargar">Cargar</Pestana>
         <Pestana a="/numeros">Números</Pestana>
-        <Pestana a="/config">Configuración</Pestana>
         <Pestana a="/granjas">Granjas</Pestana>
       </nav>
 
@@ -91,7 +89,6 @@ export function App() {
           <Route path="/estado" element={<Estado />} />
           <Route path="/cargar" element={<Cargar alGuardar={alGuardar} />} />
           <Route path="/numeros" element={<Numeros />} />
-          <Route path="/config" element={<Config rol={sesion.rol} />} />
           <Route path="/comenzar" element={<PantallaComenzar />} />
           <Route
             path="/granjas"

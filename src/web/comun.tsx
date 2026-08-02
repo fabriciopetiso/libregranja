@@ -9,6 +9,8 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
 
+import { api } from './api.js'
+
 export function useDatos<T>(cargar: () => Promise<T>, deps: unknown[] = []): {
   datos: T | null
   error: string | null
@@ -250,6 +252,155 @@ export function SelectorDestino({
   )
 }
 
+/**
+ * Editar o borrar algo, ahí donde se lo está mirando.
+ *
+ * No hay una pantalla de configuración: cada cosa se administra donde aparece.
+ * El lugar se corrige en el árbol de la granja, el insumo en el depósito, el
+ * cliente en la tabla de deudas. Crear ya se hace sobre la marcha al cargar, así
+ * que lo único que faltaba era poder corregir un nombre y borrar.
+ */
+export function EditarRegistro({
+  tabla,
+  registro,
+  campos,
+  alCambiar,
+  alCerrar,
+  puedeBorrar = true,
+}: {
+  tabla: string
+  registro: { id: string } & Record<string, unknown>
+  campos: CampoAlta[]
+  alCambiar: () => void
+  alCerrar: () => void
+  puedeBorrar?: boolean
+}) {
+  const [datos, setDatos] = useState<Record<string, string | boolean>>(() =>
+    Object.fromEntries(
+      campos.map((c) => {
+        const actual = registro[c.clave]
+        if (c.tipo === 'casilla') return [c.clave, actual === true]
+        return [c.clave, actual === null || actual === undefined ? '' : String(actual)]
+      }),
+    ),
+  )
+  const [trabajando, setTrabajando] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [confirmando, setConfirmando] = useState(false)
+
+  const guardar = async () => {
+    setTrabajando(true)
+    setError(null)
+    try {
+      await api.actualizar(tabla, registro.id, datos)
+      alCambiar()
+      alCerrar()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'no se pudo guardar')
+    } finally {
+      setTrabajando(false)
+    }
+  }
+
+  const borrar = async () => {
+    setTrabajando(true)
+    setError(null)
+    try {
+      await api.anular(tabla, registro.id)
+      alCambiar()
+      alCerrar()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'no se pudo borrar')
+    } finally {
+      setTrabajando(false)
+    }
+  }
+
+  return (
+    <div className="editor">
+      {campos.map((c) => (
+        <div key={c.clave} style={{ marginBottom: '0.7rem' }}>
+          {c.tipo === 'casilla' ? (
+            <label style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', margin: 0 }}>
+              <input
+                type="checkbox"
+                checked={datos[c.clave] === true}
+                onChange={(e) => setDatos({ ...datos, [c.clave]: e.target.checked })}
+                style={{ width: 'auto', minHeight: 0 }}
+              />
+              <span style={{ margin: 0 }}>{c.etiqueta}</span>
+            </label>
+          ) : (
+            <>
+              <span style={{ display: 'block', fontSize: '0.8rem', color: '#666', marginBottom: '0.25rem' }}>
+                {c.etiqueta}
+              </span>
+              {c.tipo === 'opciones' ? (
+                <select
+                  value={String(datos[c.clave] ?? '')}
+                  onChange={(e) => setDatos({ ...datos, [c.clave]: e.target.value })}
+                >
+                  {(c.opciones ?? []).map((o) => (
+                    <option key={o.valor} value={o.valor}>
+                      {o.etiqueta}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <input
+                  value={String(datos[c.clave] ?? '')}
+                  onChange={(e) => setDatos({ ...datos, [c.clave]: e.target.value })}
+                  {...(c.tipo === 'numero' ? { inputMode: 'numeric' as const } : {})}
+                  {...(c.sugerencia !== undefined ? { placeholder: c.sugerencia } : {})}
+                />
+              )}
+            </>
+          )}
+        </div>
+      ))}
+
+      {error !== null && <div className="aviso error">{error}</div>}
+
+      {/* Borrar pide confirmación en el mismo lugar: nada se borra de un toque
+          accidental, pero tampoco hace falta irse a otra pantalla. */}
+      {confirmando ? (
+        <div className="aviso">
+          <p style={{ margin: '0 0 0.6rem' }}>
+            Se saca del listado. Los movimientos que ya tenga siguen contando en los números.
+          </p>
+          <div className="fila">
+            <button type="button" className="principal" onClick={() => void borrar()} disabled={trabajando}>
+              Sí, borrar
+            </button>
+            <button type="button" className="fantasma" onClick={() => setConfirmando(false)}>
+              No
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="fila">
+          <button type="button" className="principal" onClick={() => void guardar()} disabled={trabajando}>
+            {trabajando ? 'Guardando…' : 'Guardar'}
+          </button>
+          <button type="button" className="fantasma" onClick={alCerrar}>
+            Cancelar
+          </button>
+          {puedeBorrar && (
+            <button
+              type="button"
+              className="chico fantasma peligro"
+              onClick={() => setConfirmando(true)}
+              style={{ flex: '0 0 auto', width: 'auto' }}
+            >
+              Borrar
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
 export interface CampoAlta {
   clave: string
   etiqueta: string
@@ -257,6 +408,11 @@ export interface CampoAlta {
   opciones?: Array<{ valor: string; etiqueta: string }>
   inicial?: string | boolean
   sugerencia?: string
+  /**
+   * Si viene, la lista ofrece "Agregar una nueva" y se puede crear sin salir.
+   * Una raza que todavía no existe no debería mandarte a otra pantalla.
+   */
+  alCrearOpcion?: (nombre: string) => Promise<{ id: string; nombre?: string }>
 }
 
 /**
@@ -364,16 +520,11 @@ export function SelectorConAlta({
                     {c.etiqueta}
                   </span>
                   {c.tipo === 'opciones' ? (
-                    <select
-                      value={String(datos[c.clave] ?? '')}
-                      onChange={(e) => setDatos({ ...datos, [c.clave]: e.target.value })}
-                    >
-                      {(c.opciones ?? []).map((o) => (
-                        <option key={o.valor} value={o.valor}>
-                          {o.etiqueta}
-                        </option>
-                      ))}
-                    </select>
+                    <CampoOpciones
+                      campo={c}
+                      valor={String(datos[c.clave] ?? '')}
+                      alCambiar={(v) => setDatos({ ...datos, [c.clave]: v })}
+                    />
                   ) : (
                     <input
                       value={String(datos[c.clave] ?? '')}
@@ -401,5 +552,80 @@ export function SelectorConAlta({
         </div>
       )}
     </div>
+  )
+}
+
+/**
+ * Una lista de opciones que además puede crear una nueva.
+ *
+ * Se usa donde el vocabulario todavía se está armando: la raza de los pollitos
+ * que acabás de comprar puede no existir, y mandarte a otra pantalla a crearla
+ * es exactamente lo que hace que la carga se abandone.
+ */
+function CampoOpciones({
+  campo,
+  valor,
+  alCambiar,
+}: {
+  campo: CampoAlta
+  valor: string
+  alCambiar: (v: string) => void
+}) {
+  const [nuevo, setNuevo] = useState<string | null>(null)
+  const [creando, setCreando] = useState(false)
+
+  const crear = async () => {
+    if (campo.alCrearOpcion === undefined || nuevo === null || nuevo.trim() === '') return
+    setCreando(true)
+    try {
+      const creado = await campo.alCrearOpcion(nuevo.trim())
+      alCambiar(creado.id)
+      setNuevo(null)
+    } finally {
+      setCreando(false)
+    }
+  }
+
+  if (nuevo !== null) {
+    return (
+      <div>
+        <input
+          value={nuevo}
+          onChange={(e) => setNuevo(e.target.value)}
+          placeholder={campo.sugerencia ?? 'Nombre'}
+          autoFocus
+        />
+        <div className="fila" style={{ marginTop: '0.5rem' }}>
+          <button
+            type="button"
+            className="principal chico"
+            onClick={() => void crear()}
+            disabled={nuevo.trim() === '' || creando}
+          >
+            {creando ? 'Creando…' : 'Agregar'}
+          </button>
+          <button type="button" className="fantasma chico" onClick={() => setNuevo(null)}>
+            Cancelar
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <select
+      value={valor}
+      onChange={(e) => {
+        if (e.target.value === '__nueva__') setNuevo('')
+        else alCambiar(e.target.value)
+      }}
+    >
+      {(campo.opciones ?? []).map((o) => (
+        <option key={o.valor} value={o.valor}>
+          {o.etiqueta}
+        </option>
+      ))}
+      {campo.alCrearOpcion !== undefined && <option value="__nueva__">+ Agregar una nueva…</option>}
+    </select>
   )
 }
