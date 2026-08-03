@@ -696,12 +696,19 @@ function PasoAlgo({ alGuardar }: { alGuardar: () => void }) {
   if (capacidades?.['registraNacimientos'] === true) {
     opciones.splice(0, 0, { valor: 'nacimiento', etiqueta: 'Nacieron' })
   }
-  if (capacidades?.['registraHuevos'] === true) {
-    opciones.push({ valor: 'huevos', etiqueta: 'Junté huevos' })
-    opciones.push({ valor: 'salida_huevos', etiqueta: 'Se rompieron o los consumimos' })
-    // Los huevos salen de acá hacia la incubadora: es un traslado de huevos.
-    opciones.push({ valor: 'carga_incubacion', etiqueta: 'Los mandé a incubar' })
-  }
+  /**
+   * Los huevos se pueden anotar en cualquier tanda, sin depender del tipo.
+   *
+   * Una tanda de reproductoras también pone huevos, y una de engorde puede
+   * llegar a poner alguno. Atar esto a una capacidad obligaba a ir a cambiar el
+   * tipo de la tanda antes de poder anotar lo que ya estaba en el balde: una
+   * traba sin nada a cambio.
+   */
+  opciones.push({ valor: 'huevos', etiqueta: 'Junté huevos' })
+  opciones.push({ valor: 'salida_huevos', etiqueta: 'Se rompieron o los consumimos' })
+  // Los huevos salen de acá hacia la incubadora: es un traslado de huevos.
+  opciones.push({ valor: 'carga_incubacion', etiqueta: 'Los mandé a incubar' })
+
   if (capacidades?.['registraCargaIncubacion'] === true) {
     opciones.push({ valor: 'fertiles', etiqueta: 'Conté los fértiles' })
   }
