@@ -14,7 +14,18 @@ import type { Base } from './conexion.js'
 
 const ESPECIES = ['Conejo', 'Gallina']
 
-const PLANTILLAS: Array<{ nombre: string; capacidades: string[] }> = [
+/**
+ * Los tipos de tanda con que arranca una granja.
+ *
+ * Un tipo es un nombre más las casillas de qué se le registra. La app nunca
+ * mira cómo se llama: sólo lee las casillas para decidir qué campos mostrar y
+ * qué opciones ofrecer al cargar.
+ *
+ * Sin estos, una granja nueva no tiene forma de anotar huevos ni de usar una
+ * incubadora, porque esas opciones aparecen sólo si el tipo de la tanda las
+ * habilita.
+ */
+const TIPOS: Array<{ nombre: string; capacidades: string[] }> = [
   { nombre: 'Reproductores', capacidades: ['animales_con_nombre', 'registra_nacimientos', 'registra_alimento'] },
   { nombre: 'Engorde', capacidades: ['registra_peso', 'registra_alimento'] },
   { nombre: 'Postura', capacidades: ['registra_huevos', 'registra_alimento'] },
@@ -56,8 +67,8 @@ export function sembrarValoresIniciales(base: Base, granjaId: string, momento: s
   const insertarRubro = base.prepare(
     'INSERT INTO rubro_gasto (id, granja_id, nombre, creado_en, modificado_en, eliminado) VALUES (?, ?, ?, ?, ?, 0)',
   )
-  const insertarPlantilla = base.prepare(
-    `INSERT INTO plantilla
+  const insertarTipo = base.prepare(
+    `INSERT INTO categoria
        (id, granja_id, nombre, animales_con_nombre, registra_nacimientos, registra_huevos,
         registra_carga_incubacion, registra_peso, registra_alimento, creado_en, modificado_en, eliminado)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)`,
@@ -66,9 +77,9 @@ export function sembrarValoresIniciales(base: Base, granjaId: string, momento: s
   for (const nombre of ESPECIES) insertarEspecie.run(randomUUID(), granjaId, nombre, momento, momento)
   for (const nombre of RUBROS) insertarRubro.run(randomUUID(), granjaId, nombre, momento, momento)
 
-  for (const { nombre, capacidades } of PLANTILLAS) {
+  for (const { nombre, capacidades } of TIPOS) {
     const tiene = (c: string): number => (capacidades.includes(c) ? 1 : 0)
-    insertarPlantilla.run(
+    insertarTipo.run(
       randomUUID(),
       granjaId,
       nombre,
