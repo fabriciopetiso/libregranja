@@ -33,6 +33,7 @@ export type TipoConocido =
   | 'traslado'
   | 'recuento'
   | 'carga_incubacion'
+  | 'descarte_incubacion'
   | 'fertiles'
   | 'huevos'
   | 'salida_huevos'
@@ -110,6 +111,12 @@ export interface EstadoTanda {
   animales: bigint
   costoCentavos: bigint
   huevosCargados: bigint
+  /**
+   * Descartados en la ovoscopía, alrededor del día 18: los que se miran a
+   * trasluz y no tienen embrión, o lo tienen muerto. Los que siguen son los que
+   * pasan a la nacedora.
+   */
+  huevosDescartados: bigint
   huevosFertiles: bigint
   /** Cuántas veces se registraron fértiles. Si es 0, el porcentaje sobre fértiles no se muestra (§7). */
   registrosFertiles: number

@@ -160,7 +160,18 @@ export interface EstadoApi {
       resultado: string
       cerrada: boolean
       categoria: Registro | null
-      incubacion: { sobreCargados: number | null; sobreFertiles: number | null } | null
+      incubacion: {
+        cargados: string
+        descartados: string
+        aNacedora: string
+        nacidos: string
+        noNacieron: string
+        sobreCargados: number | null
+        sobreNacedora: number | null
+        sobreFertiles: number | null
+        descartePorcentaje: number | null
+        etapa: { dia: number; etapa: 'incubando' | 'ovoscopia' | 'nacedora' | 'terminada'; faltan: number }
+      } | null
     }
   >
   deposito: Array<

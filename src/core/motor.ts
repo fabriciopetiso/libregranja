@@ -53,6 +53,7 @@ function tandaNueva(): EstadoTanda {
     animales: 0n,
     costoCentavos: 0n,
     huevosCargados: 0n,
+    huevosDescartados: 0n,
     huevosFertiles: 0n,
     registrosFertiles: 0,
     nacidos: 0n,
@@ -377,7 +378,14 @@ export function calcular(movimientos: readonly Movimiento[], catalogo: Catalogo 
        * de antes de empezar a usar la app—.
        */
       case 'carga_incubacion': {
-        if (mov.tandaId === undefined) break
+        // Huevos comprados o de antes de usar la app: entran a la incubadora
+        // sin salir del stock de nadie.
+        if (mov.tandaId === undefined) {
+          if (mov.tandaDestinoId !== undefined) {
+            obtener(tandas, mov.tandaDestinoId, tandaNueva).huevosCargados += mov.cantidad
+          }
+          break
+        }
 
         if (mov.tandaDestinoId !== undefined) {
           const origen = obtener(tandas, mov.tandaId, tandaNueva)
@@ -393,6 +401,20 @@ export function calcular(movimientos: readonly Movimiento[], catalogo: Catalogo 
         } else {
           obtener(tandas, mov.tandaId, tandaNueva).huevosCargados += mov.cantidad
         }
+        break
+      }
+
+      /**
+       * Ovoscopía, alrededor del día 18: se miran los huevos a trasluz y se
+       * descartan los que no tienen embrión o lo tienen muerto. Los que quedan
+       * son los que pasan a la nacedora.
+       *
+       * No se restan de los cargados: cargados es lo que entró, y el descarte
+       * es parte del resultado de esa incubación.
+       */
+      case 'descarte_incubacion': {
+        if (mov.tandaId === undefined) break
+        obtener(tandas, mov.tandaId, tandaNueva).huevosDescartados += mov.cantidad
         break
       }
 

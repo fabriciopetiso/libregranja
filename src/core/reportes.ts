@@ -246,17 +246,68 @@ export function balancePorNivel(estado: Estado, jerarquia: Jerarquia): Map<strin
 }
 
 /**
- * Rendimiento de una incubación (§7).
+ * Cómo salió una incubación.
  *
- * `sobreFertiles` es null cuando no se registraron fértiles: sin el dato, no se
- * estima (§10).
+ * El ciclo real de una gallina tiene tres momentos, y cada uno explica una
+ * pérdida distinta:
+ *
+ *   día 0   se cargan los huevos
+ *   día 18  ovoscopía: se miran a trasluz y se descartan los que no tienen
+ *           embrión o lo tienen muerto. Los que siguen pasan a la nacedora
+ *   día 21  nacen
+ *
+ * Separar el descarte de los que no nacieron importa: descartar mucho en la
+ * ovoscopía habla de los reproductores o de cómo se guardaron los huevos;
+ * perder muchos en la nacedora habla de la máquina. Un solo porcentaje de
+ * nacimiento mezcla las dos cosas y no deja arreglar ninguna.
  */
 export function rendimientoIncubacion(tanda: EstadoTanda): {
+  cargados: bigint
+  descartados: bigint
+  aNacedora: bigint
+  nacidos: bigint
+  noNacieron: bigint
+  /** Nacidos sobre todo lo que entró. Es el número del negocio. */
   sobreCargados: number | null
+  /** Nacidos sobre los que llegaron a la nacedora. Habla de la máquina. */
+  sobreNacedora: number | null
+  /** Nacidos sobre los fértiles, si se contaron. Sin el dato, no se estima. */
   sobreFertiles: number | null
+  /** Qué parte se fue en la ovoscopía. */
+  descartePorcentaje: number | null
 } {
+  const aNacedora = tanda.huevosCargados - tanda.huevosDescartados
+  const noNacieron = aNacedora - tanda.nacidos
+
   return {
+    cargados: tanda.huevosCargados,
+    descartados: tanda.huevosDescartados,
+    aNacedora,
+    nacidos: tanda.nacidos,
+    noNacieron: noNacieron < 0n ? 0n : noNacieron,
     sobreCargados: porcentaje(tanda.nacidos, tanda.huevosCargados),
+    sobreNacedora: aNacedora <= 0n ? null : porcentaje(tanda.nacidos, aNacedora),
     sobreFertiles: tanda.registrosFertiles === 0 ? null : porcentaje(tanda.nacidos, tanda.huevosFertiles),
+    descartePorcentaje: porcentaje(tanda.huevosDescartados, tanda.huevosCargados),
   }
+}
+
+/**
+ * En qué momento del ciclo está una incubación, contando desde la carga.
+ *
+ * Las fechas se derivan de cuándo empezó: no hay nada que mantener al día ni
+ * recordatorio que configurar. Los 18 y 21 días son los de la gallina; para
+ * otras especies el número cambia, y por eso se muestran como referencia y no
+ * como una regla que bloquee nada.
+ */
+export function etapaIncubacion(
+  fechaInicio: Fecha,
+  hoy: Fecha,
+): { dia: number; etapa: 'incubando' | 'ovoscopia' | 'nacedora' | 'terminada'; faltan: number } {
+  const dia = Math.floor((new Date(hoy).getTime() - new Date(fechaInicio).getTime()) / 86_400_000)
+
+  if (dia < 17) return { dia, etapa: 'incubando', faltan: 18 - dia }
+  if (dia < 19) return { dia, etapa: 'ovoscopia', faltan: 0 }
+  if (dia < 22) return { dia, etapa: 'nacedora', faltan: Math.max(0, 21 - dia) }
+  return { dia, etapa: 'terminada', faltan: 0 }
 }

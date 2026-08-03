@@ -21,6 +21,7 @@ import { calcular } from '../core/motor.js'
 import {
   balancePorNivel,
   deudaPorContraparte,
+  etapaIncubacion,
   gastosPorRubro,
   rendimientoIncubacion,
   resultadoDelPeriodo,
@@ -489,7 +490,24 @@ export function crearApi(base: Base): Hono<Entorno> {
           nacidos: calculado?.nacidos ?? 0n,
           huevosRecolectados: calculado?.huevosRecolectados ?? 0n,
           huevos: calculado?.huevosDisponibles ?? 0n,
-          incubacion: calculado === undefined ? null : rendimientoIncubacion(calculado),
+          incubacion:
+            calculado === undefined || calculado.huevosCargados === 0n
+              ? null
+              : (() => {
+                  const r = rendimientoIncubacion(calculado)
+                  return {
+                    ...r,
+                    cargados: r.cargados.toString(),
+                    descartados: r.descartados.toString(),
+                    aNacedora: r.aNacedora.toString(),
+                    nacidos: r.nacidos.toString(),
+                    noNacieron: r.noNacieron.toString(),
+                    etapa: etapaIncubacion(
+                      String(t['fechaInicio'] ?? t['creadoEn']),
+                      new Date().toISOString().slice(0, 10),
+                    ),
+                  }
+                })(),
           diasAbierta: Math.max(0, Math.floor((hoy.getTime() - inicio.getTime()) / 86_400_000)),
         }
       }),

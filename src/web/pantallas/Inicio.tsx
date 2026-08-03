@@ -497,13 +497,11 @@ function FilaTanda({
             {[tanda.categoria?.['nombre'] as string | undefined, `${tanda.diasAbierta} días`]
               .filter(Boolean)
               .join(' · ')}
-            {tanda.incubacion !== null &&
-              tanda.incubacion.sobreCargados !== null &&
-              ` · ${entero(tanda.nacidos)} de ${entero(tanda.huevosCargados)} · ${tanda.incubacion.sobreCargados.toFixed(2)}%`}
           </span>
         </button>
 
         <span className="datos-nodo">
+          {tanda.incubacion !== null && <span className="chip etapa">{rotuloEtapa(tanda.incubacion.etapa)}</span>}
           {BigInt(tanda.animales) !== 0n && <span className="chip">{entero(tanda.animales)}</span>}
           {BigInt(tanda.huevos) !== 0n && <span className="chip huevos">{entero(tanda.huevos)} hv</span>}
           {BigInt(tanda.costoCentavos) !== 0n && (
@@ -511,6 +509,8 @@ function FilaTanda({
           )}
         </span>
       </div>
+
+      {tanda.incubacion !== null && <Incubacion datos={tanda.incubacion} nivel={nivel} />}
 
       {editando === clave && (
         <div style={{ paddingLeft: `${nivel * 1.1 + 1.6}rem` }}>
@@ -706,5 +706,83 @@ function Detalle({
         Cerrar
       </button>
     </section>
+  )
+}
+
+/** En qué momento está la incubación, contado desde la carga. */
+function rotuloEtapa(e: { dia: number; etapa: string; faltan: number }): string {
+  if (e.etapa === 'incubando') return `día ${e.dia} · faltan ${e.faltan} para ovoscopía`
+  if (e.etapa === 'ovoscopia') return `día ${e.dia} · toca ovoscopía`
+  if (e.etapa === 'nacedora') return e.faltan > 0 ? `en nacedora · faltan ${e.faltan}` : 'en nacedora'
+  return `terminada · día ${e.dia}`
+}
+
+/**
+ * Cómo salió una incubación, etapa por etapa.
+ *
+ * Separar lo descartado en la ovoscopía de lo que no nació importa: lo primero
+ * habla de los reproductores o de cómo se guardaron los huevos, lo segundo de
+ * la máquina. Un solo porcentaje mezcla las dos cosas y no deja arreglar
+ * ninguna.
+ */
+function Incubacion({
+  datos,
+  nivel,
+}: {
+  datos: NonNullable<Tanda['incubacion']>
+  nivel: number
+}) {
+  return (
+    <div className="incubacion" style={{ marginLeft: `${nivel * 1.1 + 1.6}rem` }}>
+      <table>
+        <tbody>
+          <tr>
+            <td>Se cargaron</td>
+            <td className="numero">{entero(datos.cargados)}</td>
+            <td />
+          </tr>
+          {BigInt(datos.descartados) > 0n && (
+            <tr>
+              <td>Descartados en ovoscopía</td>
+              <td className="numero">−{entero(datos.descartados)}</td>
+              <td className="numero apagado">
+                {datos.descartePorcentaje === null ? '' : `${datos.descartePorcentaje}%`}
+              </td>
+            </tr>
+          )}
+          <tr>
+            <td>Pasaron a nacedora</td>
+            <td className="numero">{entero(datos.aNacedora)}</td>
+            <td />
+          </tr>
+          {BigInt(datos.nacidos) > 0n && (
+            <>
+              <tr>
+                <td>No nacieron</td>
+                <td className="numero">−{entero(datos.noNacieron)}</td>
+                <td />
+              </tr>
+              <tr className="total">
+                <td>Nacieron</td>
+                <td className="numero">{entero(datos.nacidos)}</td>
+                <td className="numero">
+                  {datos.sobreNacedora === null ? '' : `${datos.sobreNacedora}%`}
+                </td>
+              </tr>
+            </>
+          )}
+        </tbody>
+      </table>
+
+      {datos.sobreCargados !== null && BigInt(datos.nacidos) > 0n && (
+        <p className="calculado" style={{ margin: '.5rem 0 0' }}>
+          {datos.sobreCargados}% sobre todo lo que entró
+          {datos.sobreNacedora !== null && datos.sobreNacedora !== datos.sobreCargados && (
+            <> · {datos.sobreNacedora}% sobre los que llegaron a la nacedora</>
+          )}
+          {datos.sobreFertiles !== null && <> · {datos.sobreFertiles}% sobre fértiles</>}
+        </p>
+      )}
+    </div>
   )
 }

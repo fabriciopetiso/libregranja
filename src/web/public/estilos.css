@@ -394,6 +394,22 @@ ol.pasos li.hecho::before {
   color: var(--verde);
 }
 
+.chip.etapa { background: #e3f2fd; color: #0d47a1; }
+
+/* El detalle de una incubación: se despliega bajo su tanda porque es el único
+   caso donde un solo número no alcanza para entender qué pasó. */
+.incubacion {
+  margin: -.2rem 0 .6rem;
+  padding: .7rem .9rem;
+  background: var(--fondo);
+  border: 1px solid var(--gris-suave);
+  border-left: 3px solid #0d47a1;
+  border-radius: var(--radio);
+}
+
+.incubacion table { font-size: .85rem; }
+.incubacion td { padding: .3rem .4rem; }
+
 /* El encabezado: lo que importa de un vistazo, sin tener que leer una tabla. */
 section.tarjeta.encabezado { padding: 1.1rem 1rem; }
 

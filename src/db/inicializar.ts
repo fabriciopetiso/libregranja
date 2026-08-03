@@ -36,6 +36,15 @@ const TIPOS: Array<{ nombre: string; capacidades: string[] }> = [
   { nombre: 'Genérica', capacidades: ['registra_alimento'] },
 ]
 
+/**
+ * Lugares con que arranca una granja.
+ *
+ * La incubadora viene preseteada porque su ciclo es fijo y no se arma solo:
+ * hay que crear el lugar, después la tanda, después acordarse de que la carga
+ * se hace desde las ponedoras. Que exista de entrada saca el primer escalón.
+ */
+const LUGARES = ['Incubadora']
+
 const RUBROS = [
   'Alimento',
   'Pollitos',
@@ -74,7 +83,12 @@ export function sembrarValoresIniciales(base: Base, granjaId: string, momento: s
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)`,
   )
 
+  const insertarLugar = base.prepare(
+    'INSERT INTO unidad (id, granja_id, nombre, creado_en, modificado_en, eliminado) VALUES (?, ?, ?, ?, ?, 0)',
+  )
+
   for (const nombre of ESPECIES) insertarEspecie.run(randomUUID(), granjaId, nombre, momento, momento)
+  for (const nombre of LUGARES) insertarLugar.run(randomUUID(), granjaId, nombre, momento, momento)
   for (const nombre of RUBROS) insertarRubro.run(randomUUID(), granjaId, nombre, momento, momento)
 
   for (const { nombre, capacidades } of TIPOS) {

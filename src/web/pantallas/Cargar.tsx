@@ -709,7 +709,9 @@ function PasoAlgo({ alGuardar }: { alGuardar: () => void }) {
   // Los huevos salen de acá hacia la incubadora: es un traslado de huevos.
   opciones.push({ valor: 'carga_incubacion', etiqueta: 'Los mandé a incubar' })
 
+  // Sobre una incubación: lo que pasa entre la carga y el nacimiento.
   if (capacidades?.['registraCargaIncubacion'] === true) {
+    opciones.push({ valor: 'descarte_incubacion', etiqueta: 'Ovoscopía: descarté huevos' })
     opciones.push({ valor: 'fertiles', etiqueta: 'Conté los fértiles' })
   }
   if (capacidades?.['registraPeso'] === true) {
@@ -871,18 +873,28 @@ function PasoAlgo({ alGuardar }: { alGuardar: () => void }) {
 
               <p className="calculado">
                 {valido === 'carga_incubacion'
-                  ? 'Los huevos salen del stock de esta tanda. A los 21 días registrás los nacidos.'
+                  ? 'Los huevos salen del stock de esta tanda. Se puede cargar de varios gallineros a la misma incubación: una carga por cada uno.'
                   : 'El costo viaja con los animales, en proporción a cuántos se van.'}
               </p>
             </>
           )}
 
-          {(valido === 'muerte' || valido === 'recuento' || valido === 'traslado' || valido === 'salida_huevos') && (
+          {(valido === 'muerte' ||
+            valido === 'recuento' ||
+            valido === 'traslado' ||
+            valido === 'salida_huevos' ||
+            valido === 'descarte_incubacion') && (
             <Campo etiqueta={valido === 'traslado' ? 'Comentario' : 'Motivo (opcional)'}>
               <input
                 value={motivo}
                 onChange={(e) => setMotivo(e.target.value)}
-                placeholder={valido === 'traslado' ? 'Las mejores para reproducción' : ''}
+                placeholder={
+                  valido === 'traslado'
+                    ? 'Las mejores para reproducción'
+                    : valido === 'descarte_incubacion'
+                      ? 'Sin embrión / embrión muerto'
+                      : ''
+                }
               />
             </Campo>
           )}
