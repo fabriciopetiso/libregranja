@@ -18,7 +18,9 @@ const PLANTILLAS: Array<{ nombre: string; capacidades: string[] }> = [
   { nombre: 'Reproductores', capacidades: ['animales_con_nombre', 'registra_nacimientos', 'registra_alimento'] },
   { nombre: 'Engorde', capacidades: ['registra_peso', 'registra_alimento'] },
   { nombre: 'Postura', capacidades: ['registra_huevos', 'registra_alimento'] },
-  { nombre: 'Incubación', capacidades: ['registra_carga_incubacion'] },
+  // Una incubadora necesita las dos: cargar los huevos y anotar los nacidos.
+  // Sin la segunda, el porcentaje de nacimientos nunca se puede calcular.
+  { nombre: 'Incubación', capacidades: ['registra_carga_incubacion', 'registra_nacimientos'] },
   { nombre: 'Cría', capacidades: ['registra_nacimientos', 'registra_peso', 'registra_alimento'] },
   { nombre: 'Genérica', capacidades: ['registra_alimento'] },
 ]
