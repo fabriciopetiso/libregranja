@@ -627,7 +627,8 @@ function Vendi({ alGuardar }: { alGuardar: () => void }) {
         )}
 
         <SelectorDestino
-          etiqueta="¿De dónde salió?"
+          etiqueta="¿De qué gallinero o tanda salió?"
+          queEs="venta"
           destino={destino}
           alCambiar={(d) => {
             setDestino(d)

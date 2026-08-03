@@ -143,6 +143,7 @@ export function SelectorDestino({
   etiqueta = '¿A qué corresponde?',
   exigirTanda = false,
   alCrearLugar,
+  queEs = 'gasto',
 }: {
   destino: Destino
   alCambiar: (d: Destino) => void
@@ -152,6 +153,8 @@ export function SelectorDestino({
   exigirTanda?: boolean
   /** Si viene, se puede crear un lugar sin salir de la pantalla. */
   alCrearLugar?: (nombre: string) => Promise<{ id: string }>
+  /** Para que el texto de abajo diga la verdad: una venta no es un gasto. */
+  queEs?: 'gasto' | 'venta'
 }) {
   const [nuevoLugar, setNuevoLugar] = useState<string | null>(null)
   const [creando, setCreando] = useState(false)
@@ -242,10 +245,16 @@ export function SelectorDestino({
       {!exigirTanda && (
         <p style={{ margin: '0.25rem 0 0', fontSize: '0.8rem', color: '#999' }}>
           {destino.tandaId !== ''
-            ? 'Se carga a esa tanda.'
+            ? queEs === 'venta'
+              ? 'El ingreso va a esa tanda, y el stock sale de ahí.'
+              : 'Se carga a esa tanda.'
             : destino.unidadId !== ''
-              ? 'Se carga al lugar entero, sin tanda.'
-              : 'Se carga como gasto general de la granja.'}
+              ? queEs === 'venta'
+                ? 'El ingreso va a ese lugar, sin tanda.'
+                : 'Se carga al lugar entero, sin tanda.'
+              : queEs === 'venta'
+                ? 'El ingreso queda a nombre de toda la granja.'
+                : 'Se carga como gasto general de la granja.'}
         </p>
       )}
     </div>

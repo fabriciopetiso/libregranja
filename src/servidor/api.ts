@@ -192,6 +192,75 @@ export function crearApi(base: Base): Hono<Entorno> {
     return json({ id: granjaId, nombre: datos.data.nombre }, 201)
   })
 
+  /**
+   * Borrar una granja.
+   *
+   * Se marca como eliminada, no se borra: los movimientos siguen ahí y se
+   * puede recuperar desde la base. Y no se permite borrar la última: dejar al
+   * usuario sin ninguna granja lo dejaría sin poder entrar a nada.
+   */
+  api.delete('/granjas/:id', (c) => {
+    const usuario = c.get('usuario')
+    const granjaId = c.req.param('id')
+
+    const miembro = base
+      .prepare('SELECT rol FROM usuario_granja WHERE usuario_id = ? AND granja_id = ?')
+      .get(usuario.id, granjaId) as { rol: string } | undefined
+
+    if (miembro === undefined) return json({ error: 'no sos miembro de esa granja' }, 403)
+    if (miembro.rol !== 'admin') return json({ error: 'sólo un admin puede borrar una granja' }, 403)
+
+    const cuantas = base
+      .prepare(
+        `SELECT COUNT(*) n FROM usuario_granja ug
+          JOIN granja g ON g.id = ug.granja_id
+         WHERE ug.usuario_id = ? AND g.eliminado = 0`,
+      )
+      .get(usuario.id) as { n: bigint }
+
+    if (Number(cuantas.n) <= 1) {
+      return json({ error: 'es tu única granja: creá otra antes de borrar esta' }, 400)
+    }
+
+    const momento = new Date().toISOString()
+    base.prepare('UPDATE granja SET eliminado = 1, modificado_en = ? WHERE id = ?').run(momento, granjaId)
+
+    // Si estaba viéndola, pasa a otra de las suyas.
+    if (usuario.granjaId === granjaId) {
+      const otra = base
+        .prepare(
+          `SELECT ug.granja_id, ug.rol FROM usuario_granja ug
+            JOIN granja g ON g.id = ug.granja_id
+           WHERE ug.usuario_id = ? AND g.eliminado = 0
+           ORDER BY g.nombre COLLATE NOCASE LIMIT 1`,
+        )
+        .get(usuario.id) as { granja_id: string; rol: string } | undefined
+
+      if (otra !== undefined) {
+        base
+          .prepare('UPDATE usuario SET granja_id = ?, rol = ?, modificado_en = ? WHERE id = ?')
+          .run(otra.granja_id, otra.rol, momento, usuario.id)
+      }
+    }
+
+    return json({ ok: true })
+  })
+
+  /** Quiénes trabajan en esta granja. */
+  api.get('/usuarios', (c) => {
+    const filas = base
+      .prepare(
+        `SELECT u.id, u.nombre, u.usuario, ug.rol
+           FROM usuario_granja ug
+           JOIN usuario u ON u.id = ug.usuario_id
+          WHERE ug.granja_id = ? AND u.eliminado = 0
+          ORDER BY u.nombre COLLATE NOCASE`,
+      )
+      .all(c.get('usuario').granjaId)
+
+    return json(filas)
+  })
+
   /** Cambiar de granja activa. Sólo a una de las que el usuario es miembro. */
   api.post('/granja-activa', async (c) => {
     const cuerpo = await c.req.json().catch(() => null)
@@ -626,7 +695,16 @@ export function crearApi(base: Base): Hono<Entorno> {
       .safeParse(cuerpo)
 
     if (!datos.success) return json({ error: 'datos inválidos', detalle: datos.error.issues }, 400)
-    return json(await crearUsuario(base, c.get('usuario').granjaId, datos.data), 201)
+
+    const granjaId = c.get('usuario').granjaId
+    const creado = await crearUsuario(base, granjaId, datos.data)
+
+    // Sin la membresía no podría ver la granja al entrar.
+    base
+      .prepare('INSERT INTO usuario_granja (usuario_id, granja_id, rol, creado_en) VALUES (?, ?, ?, ?)')
+      .run(creado.id, granjaId, datos.data.rol, new Date().toISOString())
+
+    return json(creado, 201)
   })
 
   return api

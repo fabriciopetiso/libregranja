@@ -3,6 +3,7 @@ import { NavLink, Navigate, Route, Routes, useNavigate } from 'react-router-dom'
 
 import { api, pendientes, vaciarCola } from './api.js'
 import type { GranjaApi, Sesion } from './api.js'
+import { Campo, useDatos } from './comun.js'
 import { Ingreso } from './pantallas/Ingreso.js'
 import { Cargar } from './pantallas/Cargar.js'
 import { Comenzar } from './pantallas/Comenzar.js'
@@ -89,7 +90,14 @@ export function App() {
           <Route path="/comenzar" element={<PantallaComenzar />} />
           <Route
             path="/granjas"
-            element={<Granjas granjas={granjas} activa={sesion.granjaId} alCambiar={cargarSesion} />}
+            element={
+              <Granjas
+                granjas={granjas}
+                activa={sesion.granjaId}
+                alCambiar={cargarSesion}
+                rol={sesion.rol}
+              />
+            }
           />
           <Route path="*" element={<Navigate to="/inicio" replace />} />
         </Routes>
@@ -120,14 +128,17 @@ function Granjas({
   granjas,
   activa,
   alCambiar,
+  rol,
 }: {
   granjas: GranjaApi[]
   activa: string
   alCambiar: () => Promise<void>
+  rol: 'admin' | 'operador'
 }) {
   const [nombre, setNombre] = useState('')
   const [trabajando, setTrabajando] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [borrando, setBorrando] = useState<string | null>(null)
   const navegar = useNavigate()
 
   const crear = (e: React.FormEvent) => {
@@ -155,6 +166,17 @@ function Granjas({
       .finally(() => setTrabajando(false))
   }
 
+  const borrar = (id: string) => {
+    setTrabajando(true)
+    setError(null)
+    api
+      .borrarGranja(id)
+      .then(() => alCambiar())
+      .then(() => setBorrando(null))
+      .catch((err: unknown) => setError(err instanceof Error ? err.message : 'no se pudo borrar'))
+      .finally(() => setTrabajando(false))
+  }
+
   return (
     <>
       <section className="tarjeta">
@@ -162,35 +184,75 @@ function Granjas({
         <table>
           <tbody>
             {granjas.map((g) => (
-              <tr key={g.id}>
-                <td>
-                  {g.nombre}
-                  {g.id === activa && (
-                    <div style={{ fontSize: '0.78rem', color: '#1b5e20' }}>estás viendo esta</div>
-                  )}
-                </td>
-                <td style={{ textAlign: 'right' }}>
-                  {g.id !== activa && (
-                    <button
-                      type="button"
-                      className="chico fantasma"
-                      onClick={() => cambiar(g.id)}
-                      disabled={trabajando}
-                    >
-                      Cambiar
-                    </button>
-                  )}
-                </td>
-              </tr>
+              <>
+                <tr key={g.id}>
+                  <td>
+                    {g.nombre}
+                    {g.id === activa && (
+                      <div style={{ fontSize: '0.78rem', color: '#1b5e20' }}>estás viendo esta</div>
+                    )}
+                  </td>
+                  <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+                    {g.id !== activa && (
+                      <button
+                        type="button"
+                        className="chico fantasma"
+                        onClick={() => cambiar(g.id)}
+                        disabled={trabajando}
+                      >
+                        Ver esta
+                      </button>
+                    )}
+                    {g.rol === 'admin' && (
+                      <button
+                        type="button"
+                        className="chico fantasma peligro"
+                        onClick={() => setBorrando(g.id)}
+                        disabled={trabajando}
+                        style={{ marginLeft: '0.4rem' }}
+                      >
+                        Borrar
+                      </button>
+                    )}
+                  </td>
+                </tr>
+                {borrando === g.id && (
+                  <tr key={`${g.id}-c`}>
+                    <td colSpan={2}>
+                      <div className="aviso">
+                        <p style={{ margin: '0 0 0.6rem' }}>
+                          Se borra <strong>{g.nombre}</strong> con todo lo cargado adentro. Los datos quedan
+                          guardados y se pueden recuperar, pero desde la app no vas a verlos más.
+                        </p>
+                        <div className="fila">
+                          <button
+                            type="button"
+                            className="principal"
+                            onClick={() => borrar(g.id)}
+                            disabled={trabajando}
+                          >
+                            Sí, borrar
+                          </button>
+                          <button type="button" className="fantasma" onClick={() => setBorrando(null)}>
+                            No
+                          </button>
+                        </div>
+                      </div>
+                    </td>
+                  </tr>
+                )}
+              </>
             ))}
           </tbody>
         </table>
+
+        {error !== null && <div className="aviso error">{error}</div>}
       </section>
 
       <section className="tarjeta">
         <h2>Agregar una granja</h2>
         <p style={{ marginTop: 0, color: '#666', fontSize: '0.88rem' }}>
-          Arranca vacía, con sus propias especies, plantillas y rubros. Nada se mezcla con las otras.
+          Arranca vacía, con sus propias especies, tipos y rubros. Nada se mezcla con las otras.
         </p>
 
         <form className="fila" onSubmit={crear}>
@@ -204,10 +266,112 @@ function Granjas({
             Crear
           </button>
         </form>
-
-        {error !== null && <div className="aviso error">{error}</div>}
       </section>
+
+      <Quienes rol={rol} />
     </>
+  )
+}
+
+/**
+ * Quiénes cargan en esta granja.
+ *
+ * Los datos son del servidor, no del teléfono: cada persona entra con su
+ * usuario desde el suyo y todos ven lo mismo al instante. Por eso alcanza con
+ * dar de alta a quien tenga que cargar.
+ */
+function Quienes({ rol }: { rol: 'admin' | 'operador' }) {
+  const usuarios = useDatos(() => api.usuarios())
+  const [nombre, setNombre] = useState('')
+  const [usuario, setUsuario] = useState('')
+  const [clave, setClave] = useState('')
+  const [suRol, setSuRol] = useState('operador')
+  const [error, setError] = useState<string | null>(null)
+  const [trabajando, setTrabajando] = useState(false)
+
+  const agregar = (e: React.FormEvent) => {
+    e.preventDefault()
+    setTrabajando(true)
+    setError(null)
+    api
+      .crearUsuario({ nombre, usuario, clave, rol: suRol })
+      .then(() => {
+        setNombre('')
+        setUsuario('')
+        setClave('')
+        usuarios.recargar()
+      })
+      .catch((err: unknown) => setError(err instanceof Error ? err.message : 'no se pudo crear'))
+      .finally(() => setTrabajando(false))
+  }
+
+  return (
+    <section className="tarjeta">
+      <h2>Quiénes cargan</h2>
+      <p style={{ marginTop: 0, color: '#666', fontSize: '0.88rem' }}>
+        Cada uno entra con su usuario desde su propio teléfono y todos ven lo mismo: los datos están en el
+        servidor, no en el aparato.
+      </p>
+
+      <table>
+        <tbody>
+          {(usuarios.datos ?? []).map((u) => (
+            <tr key={u.id}>
+              <td>
+                {u.nombre}
+                <div style={{ fontSize: '0.78rem', color: '#666' }}>
+                  {u.usuario} · {u.rol}
+                </div>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+
+      {rol === 'admin' && (
+        <form onSubmit={agregar} style={{ marginTop: '0.75rem' }}>
+          <div className="fila">
+            <Campo etiqueta="Nombre">
+              <input value={nombre} onChange={(e) => setNombre(e.target.value)} placeholder="Javier" />
+            </Campo>
+            <Campo etiqueta="Usuario">
+              <input
+                value={usuario}
+                onChange={(e) => setUsuario(e.target.value)}
+                autoCapitalize="none"
+                placeholder="javier"
+              />
+            </Campo>
+          </div>
+          <div className="fila">
+            <Campo etiqueta="Clave">
+              <input
+                type="password"
+                value={clave}
+                onChange={(e) => setClave(e.target.value)}
+                placeholder="al menos 8 caracteres"
+              />
+            </Campo>
+            <Campo etiqueta="Puede">
+              <select value={suRol} onChange={(e) => setSuRol(e.target.value)}>
+                <option value="operador">Cargar y ver</option>
+                <option value="admin">Todo, incluso borrar</option>
+              </select>
+            </Campo>
+          </div>
+
+          {error !== null && <div className="aviso error">{error}</div>}
+
+          <button
+            type="submit"
+            className="fantasma"
+            disabled={nombre === '' || usuario === '' || clave.length < 8 || trabajando}
+          >
+            Agregar persona
+          </button>
+        </form>
+      )}
+    </section>
   )
 }
 

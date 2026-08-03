@@ -61,6 +61,13 @@ export const api = {
   crearGranja: (nombre: string) =>
     pedir<{ id: string; nombre: string }>('/granjas', { method: 'POST', body: JSON.stringify({ nombre }) }),
 
+  borrarGranja: (id: string) => pedir<{ ok: true }>(`/granjas/${id}`, { method: 'DELETE' }),
+
+  usuarios: () => pedir<Array<{ id: string; nombre: string; usuario: string; rol: string }>>('/usuarios'),
+
+  crearUsuario: (datos: { nombre: string; usuario: string; clave: string; rol: string }) =>
+    pedir<{ id: string }>('/usuarios', { method: 'POST', body: JSON.stringify(datos) }),
+
   cambiarGranja: (granjaId: string) =>
     pedir<{ ok: true }>('/granja-activa', { method: 'POST', body: JSON.stringify({ granjaId }) }),
 
